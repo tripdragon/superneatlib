@@ -1,0 +1,24 @@
+{
+  "name": "superneatlib",
+  "version": "0.0.1",
+  "scripts": {
+    "rollup-watch": "rollup -c -w",
+    "build": "rollup --c",
+    "notstart": "node server.mjs",
+    "start-server": "nodemon server.mjs",
+    "start-demo": "nodemon server-demo.mjs"
+  },
+  "devDependencies": {
+    "@rollup/plugin-alias": "^5.1.1",
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "@rollup/plugin-terser": "^0.4.4",
+    "rollup": "^4.32.1"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "nodemon": "^3.1.9",
+    "qrcode": "^1.5.3",
+    "three": "^0.153.0"
+  }
+}
