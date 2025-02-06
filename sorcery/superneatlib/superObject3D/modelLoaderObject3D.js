@@ -12,7 +12,7 @@
 import { AnimationMixer } from 'three';
 // import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { decoSuper3D } from './decoSuper3D.js';
+// import { decoSuper3D } from './decoSuper3D.js';
 import { SuperObject3D } from './superObject3D.js';
 
 export class ModelLoaderObject3D extends SuperObject3D{
@@ -20,8 +20,13 @@ export class ModelLoaderObject3D extends SuperObject3D{
   isRoot = true;
   selectorMesh = null;
   modelUrl = '';
+
   animations = null;
   mixer = null;
+  actions = {};
+  shouldAnimateMixer = false;
+  previousAction = null;
+  currentAction = null;
 
   constructor(modelUrl){
     super();
@@ -38,6 +43,23 @@ export class ModelLoaderObject3D extends SuperObject3D{
     // this.mixer = gltf.scene.mixer;
     this.mixer = new AnimationMixer( gltf.scene );
 
+    this.actions = {};
+
+		for ( let i = 0; i < this.animations.length; i ++ ) {
+
+			const clip = this.animations[ i ];
+			const action = this.mixer.clipAction( clip );
+			this.actions[ clip.name ] = action;
+
+			// if ( emotes.indexOf( clip.name ) >= 0 || states.indexOf( clip.name ) >= 4 ) {
+      //
+			// 	action.clampWhenFinished = true;
+			// 	action.loop = THREE.LoopOnce;
+      //
+			// }
+
+		}
+
 // debugger
     this.update = function(deltaTime) {
       // this.super.update(deltaTime);
@@ -50,7 +72,7 @@ export class ModelLoaderObject3D extends SuperObject3D{
   // store is curious
   wrap(gltf, store){
     let model = gltf.scene;
-    decoSuper3D(model);
+    SuperObject3D.decoSuper3D(model);
     this.add(model);
     // need to store the gltf animations and other meta data here
     // skip for now, since project does not need it

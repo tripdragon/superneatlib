@@ -12,6 +12,7 @@
     "@rollup/plugin-alias": "^5.1.1",
     "@rollup/plugin-node-resolve": "^16.0.0",
     "@rollup/plugin-terser": "^0.4.4",
+    "lil-gui": "^0.20.0",
     "rollup": "^4.32.1"
   },
   "dependencies": {
@@ -19,6 +20,6 @@
     "express": "^4.21.2",
     "nodemon": "^3.1.9",
     "qrcode": "^1.5.3",
-    "three": "^0.153.0"
+    "three": "^0.172.0"
   }
 }

@@ -27,9 +27,11 @@ export * from './superneatlib/logics/touchSystems/touchLogics.js';
 // export * from './superneatlib/primitives/ball.js';
 import { ball } from './superneatlib/primitives/meshes/ball.js';
 import { line } from './superneatlib/primitives/meshes/line.js';
+import { plane } from './superneatlib/primitives/meshes/plane.js';
 export const Primitives = {
   ball : ball,
-  line : line
+  line : line,
+  plane : plane
 }
 import { hemisphereLight } from './superneatlib/primitives/lights/hemisphereLight.js';
 export const Lights = {
@@ -41,17 +43,22 @@ export * from './superneatlib/setups/xr/setupXR.js';
 export * from './superneatlib/setups/xr/setupXRLighting.js';
 export * from './superneatlib/setups/xr/setupXRRenderLoopHook.js';
 
+export * from './superneatlib/setups/controls/setupOrbitController.js';
+export * from './superneatlib/setups/controls/setupFirstPersonControls.js';
+export * from './superneatlib/setups/controls/setupFlyControls.js';
+
 export * from './superneatlib/setups/addResizeWindow.js';
 export * from './superneatlib/setups/animateDeco.js';
 export * from './superneatlib/setups/gameLoop.js';
 export * from './superneatlib/setups/init3D.js';
-export * from './superneatlib/setups/orbitControls.js';
 export * from './superneatlib/setups/setupDebuggerHitPoint.js';
 export * from './superneatlib/setups/setupGridHelper.js';
 export * from './superneatlib/setups/setupKeyboardEvents.js';
 export * from './superneatlib/setups/setupPlaneHelper.js';
 export * from './superneatlib/setups/setupShadowPlane.js';
 export * from './superneatlib/setups/setupTouchEvents.js';
+export * from './superneatlib/setups/setupBloomRendering.js';
+export * from './superneatlib/setups/setupStats.js';
 
 
 export * from './superneatlib/superObject3D/decoSuper3D.js';

@@ -5,7 +5,13 @@
 import { APP as _o } from "@src/app.js";
 */
 
-import { Vector3 } from 'three';
+import { Vector3, Vector2 } from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+
+
 
 import { DeltaFrame } from '@tools/deltaFrame.js';
 
@@ -18,7 +24,10 @@ import { CheapPool } from '@tools/cheapPool.js';
 // import { TextureLoader } from 'three';
 //
 
+import GUI from 'lil-gui';
+
 import { loaders } from './loaders.js';
+
 
 
 export const APP = {
@@ -30,13 +39,27 @@ export const APP = {
   camera: null,
   renderer : null,
   domElement : null,
+  stats : null,
 
   clock: new Clock(),// T: Clock
 
+  currentControls : null,
   orbitControls: null, // T : OrbitControls
+  flyControls : null,
+  firstPersonControls : null,
 
   narfs : 2,
 
+  // const gui = store.debuggerlilGui.get()
+  debuggerlilGui : {
+    gui : null,
+    get : function() {
+      if(!this.gui){
+        this.gui = new GUI();
+      }
+      return this.gui;
+    }
+  },
 
   // stacks & grapths
 
@@ -77,6 +100,37 @@ export const APP = {
     planeFound : false,
     controller : null, // T : renderer.xr.getController
     reticle: null, // Mesh
+  },
+
+  postProcessing : {
+    composer : null, // = new EffectComposer( renderer );
+    useComposer : false,
+    bloomPass : null,
+    // bootUp: function(store) {
+    //   this.composer = new EffectComposer(store.renderer);
+    //   this.composer.addPass( new RenderPass( store.scene, store.camera ) );
+    //   this.useComposer = true;
+    // },
+
+    // store.postProcessing.bootUpBloom(store)
+    // const bloomPass = new UnrealBloomPass( new THREE.Vector2( window.innerWidth, window.innerHeight ), 1.5, 0.4, 0.85 );
+    bootUpBloom : function(store, {
+      resolution = new Vector2( window.innerWidth, window.innerHeight ),
+      strength = 1.5, radius = 0.4, threshold = 0.85
+      }={}) {
+        // resolution = new Vector2( window.innerWidth, window.innerHeight );
+        // resolution = new Vector2( 2,2 );
+      this.composer = new EffectComposer(store.renderer);
+      this.composer.addPass( new RenderPass( store.scene, store.camera ) );
+      this.useComposer = true;
+
+      this.bloomPass = new UnrealBloomPass(resolution, strength, radius, threshold);
+      this.composer.addPass(this.bloomPass);
+
+      this.composer.addPass( new OutputPass() );
+      this.useComposer = true;
+    },
+
   },
 
   // modes

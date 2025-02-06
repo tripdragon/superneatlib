@@ -1,6 +1,6 @@
 
 // import * as THREE from 'three';
-import { APP as _o } from "@app";
+// import { APP as _o } from "@app";
 
 // import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -24,7 +24,7 @@ export function setupOrbitController(store) {
     // orbitControls.update();
     orbitControls.enableDamping = true;
     store.orbitControls = orbitControls;
-
+    store.currentControls = orbitControls;
   // }
 
 }

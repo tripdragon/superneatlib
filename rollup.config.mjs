@@ -21,6 +21,8 @@ const globals = {
 				'three/examples/jsm/webxr':'three/examples/jsm/webxr',
 
 				'three/examples/jsm/controls':'three/examples/jsm/controls',
+
+				'lil-gui': 'lil-gui'
 	    }
 
 // rollup.config.mjs
@@ -41,7 +43,7 @@ export default {
 			globals: globals
 		}
   ],
-	external: ['three'],  // Specify external libraries that should not be bundled
+	external: ['three', 'lil-gui'],  // Specify external libraries that should not be bundled
 	plugins: [
 		nodeResolve({
 			browser: true,
@@ -65,5 +67,8 @@ export default {
 
       ],
     }),
-  ]
+  ],
+	// esbuild: {
+  //   target: 'esnext' // or 'es2022'
+  // }
 };

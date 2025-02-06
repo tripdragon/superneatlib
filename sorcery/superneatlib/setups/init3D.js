@@ -1,7 +1,7 @@
 
 
 // import * as THREE from 'three';
-import { Clock, WebGLRenderer, PCFSoftShadowMap, Scene, PerspectiveCamera } from "three";
+import { Clock, WebGLRenderer, PCFSoftShadowMap, Scene, PerspectiveCamera, ReinhardToneMapping } from "three";
 
 
 export function init3d(store) {
@@ -28,6 +28,17 @@ export function init3d(store) {
 
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFSoftShadowMap; // default THREE.PCFShadowMap
+
+  // ?????
+  // renderer.toneMapping = ReinhardToneMapping;
+  // export const NoToneMapping = 0;
+  // export const LinearToneMapping = 1;
+  // export const ReinhardToneMapping = 2;
+  // export const CineonToneMapping = 3;
+  // export const ACESFilmicToneMapping = 4;
+  // export const CustomToneMapping = 5;
+  // export const AgXToneMapping = 6;
+  // export const NeutralToneMapping = 7;
 
   // renderer.xr.addEventListener("sessionstart", sessionStart);
 

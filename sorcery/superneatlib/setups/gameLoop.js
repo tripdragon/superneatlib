@@ -149,7 +149,9 @@ export function setupGameLoopWithFPSClamp(store, fps = 60) {
       //   }
       // }
 
+      //
       const dt = clock.getDelta();
+
       for (let i = 0; i < store.sceneGrapth.length; i++) {
         const aa = store.sceneGrapth[i];
         if (aa.isSuperObject3D) {
@@ -158,6 +160,9 @@ export function setupGameLoopWithFPSClamp(store, fps = 60) {
           }
           if (aa?.update) {
            aa.update(dt);
+          }
+          if(aa?.shouldAnimateMixer && aa.shouldAnimateMixer === true && aa.mixer){
+            aa.mixer.update(dt);
           }
         }
         // else if (aa.isObject3D) {
@@ -172,16 +177,37 @@ export function setupGameLoopWithFPSClamp(store, fps = 60) {
       // for (let i = 0; i < store.gameLoopHooks.length; i++) {
       //   store.gameLoopHooks[i]();
       // }
+      //
+      // if(store.orbitControls && store.orbitControls.enableDamping){
+      //   store.orbitControls.update(dt);
+      // }
+      // else if(store.firstPersonControls) {
+      //   store.firstPersonControls.update( dt );
+      // }
 
-      if(store.orbitControls && store.orbitControls.enableDamping){
-        store.orbitControls.update();
+      if(store.currentControls){
+        store.currentControls.update(dt)
       }
 
-      store.renderer.render(store.scene, store.camera);
+      // render
+      if(store.postProcessing.useComposer === false){
+        store.renderer.render(store.scene, store.camera);
+      }
+      else if(store.postProcessing.useComposer && store.postProcessing.composer){
+        store.postProcessing.composer.render();
+      }
+
     }
     // requestAnimationFrame(animate);
 
+    // if (store.stats) {
+    //   // debugger
+    //   // console.log("?stats");
+    //   store.stats.update();
+    // }
+
   }
+
 
   store.renderer.setAnimationLoop(animate)
   // animate();

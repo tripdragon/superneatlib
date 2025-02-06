@@ -1,4 +1,5 @@
-import { Matrix4, TrianglesDrawMode, TriangleFanDrawMode, TriangleStripDrawMode, Loader, LoaderUtils, FileLoader, Color, SpotLight, PointLight, DirectionalLight, MeshBasicMaterial, SRGBColorSpace, MeshPhysicalMaterial, Vector2, Vector3, Quaternion, InstancedMesh, Object3D, TextureLoader, ImageBitmapLoader, BufferAttribute, InterleavedBuffer, InterleavedBufferAttribute, LinearFilter, LinearMipmapLinearFilter, RepeatWrapping, PointsMaterial, Material, LineBasicMaterial, MeshStandardMaterial, DoubleSide, PropertyBinding, BufferGeometry, SkinnedMesh, Mesh, LineSegments, Line, LineLoop, Points, Group, PerspectiveCamera, MathUtils, OrthographicCamera, Skeleton, InterpolateLinear, AnimationClip, Bone, NearestFilter, NearestMipmapNearestFilter, LinearMipmapNearestFilter, NearestMipmapLinearFilter, ClampToEdgeWrapping, MirroredRepeatWrapping, InterpolateDiscrete, FrontSide, Texture, VectorKeyframeTrack, QuaternionKeyframeTrack, NumberKeyframeTrack, Box3, Sphere, Interpolant, Clock, Raycaster, Plane, EventDispatcher, PlaneHelper, SphereGeometry, LineCurve3, TubeGeometry, HemisphereLight, HemisphereLightHelper, LightProbe, WebGLCubeRenderTarget, WebGLRenderer, PCFSoftShadowMap, Scene, MOUSE, TOUCH, Spherical, GridHelper, PlaneGeometry, ShadowMaterial, AnimationMixer } from 'three';
+import { OrthographicCamera, Mesh, BufferGeometry, Float32BufferAttribute, ShaderMaterial, UniformsUtils, Vector2, WebGLRenderTarget, HalfFloatType, NoBlending, Clock, Color, Vector3, AdditiveBlending, MeshBasicMaterial, RawShaderMaterial, ColorManagement, SRGBTransfer, LinearToneMapping, ReinhardToneMapping, CineonToneMapping, ACESFilmicToneMapping, AgXToneMapping, NeutralToneMapping, Matrix4, TrianglesDrawMode, TriangleFanDrawMode, TriangleStripDrawMode, Loader, LoaderUtils, FileLoader, LinearSRGBColorSpace, SpotLight, PointLight, DirectionalLight, SRGBColorSpace, MeshPhysicalMaterial, Quaternion, InstancedMesh, InstancedBufferAttribute, Object3D, TextureLoader, ImageBitmapLoader, BufferAttribute, InterleavedBuffer, InterleavedBufferAttribute, LinearFilter, LinearMipmapLinearFilter, RepeatWrapping, NearestFilter, PointsMaterial, Material, LineBasicMaterial, MeshStandardMaterial, DoubleSide, PropertyBinding, SkinnedMesh, LineSegments, Line, LineLoop, Points, Group, PerspectiveCamera, MathUtils, Skeleton, AnimationClip, Bone, InterpolateLinear, NearestMipmapNearestFilter, LinearMipmapNearestFilter, NearestMipmapLinearFilter, ClampToEdgeWrapping, MirroredRepeatWrapping, InterpolateDiscrete, FrontSide, Texture, VectorKeyframeTrack, NumberKeyframeTrack, QuaternionKeyframeTrack, Box3, Sphere, Interpolant, Raycaster, Plane, EventDispatcher, PlaneHelper, SphereGeometry, LineCurve3, TubeGeometry, PlaneGeometry, HemisphereLight, HemisphereLightHelper, LightProbe, WebGLCubeRenderTarget, Ray, Controls, MOUSE, TOUCH, Spherical, WebGLRenderer, PCFSoftShadowMap, Scene, GridHelper, ShadowMaterial, AnimationMixer } from 'three';
+import GUI from 'lil-gui';
 
 const REVISION = 1;
 
@@ -54,6 +55,1242 @@ var spinners = /*#__PURE__*/Object.freeze({
   spinnerY: spinnerY,
   spinnerZ: spinnerZ
 });
+
+/**
+ * Full-screen textured quad shader
+ */
+
+const CopyShader = {
+
+	name: 'CopyShader',
+
+	uniforms: {
+
+		'tDiffuse': { value: null },
+		'opacity': { value: 1.0 }
+
+	},
+
+	vertexShader: /* glsl */`
+
+		varying vec2 vUv;
+
+		void main() {
+
+			vUv = uv;
+			gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+
+		}`,
+
+	fragmentShader: /* glsl */`
+
+		uniform float opacity;
+
+		uniform sampler2D tDiffuse;
+
+		varying vec2 vUv;
+
+		void main() {
+
+			vec4 texel = texture2D( tDiffuse, vUv );
+			gl_FragColor = opacity * texel;
+
+
+		}`
+
+};
+
+class Pass {
+
+	constructor() {
+
+		this.isPass = true;
+
+		// if set to true, the pass is processed by the composer
+		this.enabled = true;
+
+		// if set to true, the pass indicates to swap read and write buffer after rendering
+		this.needsSwap = true;
+
+		// if set to true, the pass clears its buffer before rendering
+		this.clear = false;
+
+		// if set to true, the result of the pass is rendered to screen. This is set automatically by EffectComposer.
+		this.renderToScreen = false;
+
+	}
+
+	setSize( /* width, height */ ) {}
+
+	render( /* renderer, writeBuffer, readBuffer, deltaTime, maskActive */ ) {
+
+		console.error( 'THREE.Pass: .render() must be implemented in derived pass.' );
+
+	}
+
+	dispose() {}
+
+}
+
+// Helper for passes that need to fill the viewport with a single quad.
+
+const _camera = new OrthographicCamera( -1, 1, 1, -1, 0, 1 );
+
+// https://github.com/mrdoob/three.js/pull/21358
+
+class FullscreenTriangleGeometry extends BufferGeometry {
+
+	constructor() {
+
+		super();
+
+		this.setAttribute( 'position', new Float32BufferAttribute( [ -1, 3, 0, -1, -1, 0, 3, -1, 0 ], 3 ) );
+		this.setAttribute( 'uv', new Float32BufferAttribute( [ 0, 2, 0, 0, 2, 0 ], 2 ) );
+
+	}
+
+}
+
+const _geometry = new FullscreenTriangleGeometry();
+
+class FullScreenQuad {
+
+	constructor( material ) {
+
+		this._mesh = new Mesh( _geometry, material );
+
+	}
+
+	dispose() {
+
+		this._mesh.geometry.dispose();
+
+	}
+
+	render( renderer ) {
+
+		renderer.render( this._mesh, _camera );
+
+	}
+
+	get material() {
+
+		return this._mesh.material;
+
+	}
+
+	set material( value ) {
+
+		this._mesh.material = value;
+
+	}
+
+}
+
+class ShaderPass extends Pass {
+
+	constructor( shader, textureID ) {
+
+		super();
+
+		this.textureID = ( textureID !== undefined ) ? textureID : 'tDiffuse';
+
+		if ( shader instanceof ShaderMaterial ) {
+
+			this.uniforms = shader.uniforms;
+
+			this.material = shader;
+
+		} else if ( shader ) {
+
+			this.uniforms = UniformsUtils.clone( shader.uniforms );
+
+			this.material = new ShaderMaterial( {
+
+				name: ( shader.name !== undefined ) ? shader.name : 'unspecified',
+				defines: Object.assign( {}, shader.defines ),
+				uniforms: this.uniforms,
+				vertexShader: shader.vertexShader,
+				fragmentShader: shader.fragmentShader
+
+			} );
+
+		}
+
+		this.fsQuad = new FullScreenQuad( this.material );
+
+	}
+
+	render( renderer, writeBuffer, readBuffer /*, deltaTime, maskActive */ ) {
+
+		if ( this.uniforms[ this.textureID ] ) {
+
+			this.uniforms[ this.textureID ].value = readBuffer.texture;
+
+		}
+
+		this.fsQuad.material = this.material;
+
+		if ( this.renderToScreen ) {
+
+			renderer.setRenderTarget( null );
+			this.fsQuad.render( renderer );
+
+		} else {
+
+			renderer.setRenderTarget( writeBuffer );
+			// TODO: Avoid using autoClear properties, see https://github.com/mrdoob/three.js/pull/15571#issuecomment-465669600
+			if ( this.clear ) renderer.clear( renderer.autoClearColor, renderer.autoClearDepth, renderer.autoClearStencil );
+			this.fsQuad.render( renderer );
+
+		}
+
+	}
+
+	dispose() {
+
+		this.material.dispose();
+
+		this.fsQuad.dispose();
+
+	}
+
+}
+
+class MaskPass extends Pass {
+
+	constructor( scene, camera ) {
+
+		super();
+
+		this.scene = scene;
+		this.camera = camera;
+
+		this.clear = true;
+		this.needsSwap = false;
+
+		this.inverse = false;
+
+	}
+
+	render( renderer, writeBuffer, readBuffer /*, deltaTime, maskActive */ ) {
+
+		const context = renderer.getContext();
+		const state = renderer.state;
+
+		// don't update color or depth
+
+		state.buffers.color.setMask( false );
+		state.buffers.depth.setMask( false );
+
+		// lock buffers
+
+		state.buffers.color.setLocked( true );
+		state.buffers.depth.setLocked( true );
+
+		// set up stencil
+
+		let writeValue, clearValue;
+
+		if ( this.inverse ) {
+
+			writeValue = 0;
+			clearValue = 1;
+
+		} else {
+
+			writeValue = 1;
+			clearValue = 0;
+
+		}
+
+		state.buffers.stencil.setTest( true );
+		state.buffers.stencil.setOp( context.REPLACE, context.REPLACE, context.REPLACE );
+		state.buffers.stencil.setFunc( context.ALWAYS, writeValue, 0xffffffff );
+		state.buffers.stencil.setClear( clearValue );
+		state.buffers.stencil.setLocked( true );
+
+		// draw into the stencil buffer
+
+		renderer.setRenderTarget( readBuffer );
+		if ( this.clear ) renderer.clear();
+		renderer.render( this.scene, this.camera );
+
+		renderer.setRenderTarget( writeBuffer );
+		if ( this.clear ) renderer.clear();
+		renderer.render( this.scene, this.camera );
+
+		// unlock color and depth buffer and make them writable for subsequent rendering/clearing
+
+		state.buffers.color.setLocked( false );
+		state.buffers.depth.setLocked( false );
+
+		state.buffers.color.setMask( true );
+		state.buffers.depth.setMask( true );
+
+		// only render where stencil is set to 1
+
+		state.buffers.stencil.setLocked( false );
+		state.buffers.stencil.setFunc( context.EQUAL, 1, 0xffffffff ); // draw if == 1
+		state.buffers.stencil.setOp( context.KEEP, context.KEEP, context.KEEP );
+		state.buffers.stencil.setLocked( true );
+
+	}
+
+}
+
+class ClearMaskPass extends Pass {
+
+	constructor() {
+
+		super();
+
+		this.needsSwap = false;
+
+	}
+
+	render( renderer /*, writeBuffer, readBuffer, deltaTime, maskActive */ ) {
+
+		renderer.state.buffers.stencil.setLocked( false );
+		renderer.state.buffers.stencil.setTest( false );
+
+	}
+
+}
+
+class EffectComposer {
+
+	constructor( renderer, renderTarget ) {
+
+		this.renderer = renderer;
+
+		this._pixelRatio = renderer.getPixelRatio();
+
+		if ( renderTarget === undefined ) {
+
+			const size = renderer.getSize( new Vector2() );
+			this._width = size.width;
+			this._height = size.height;
+
+			renderTarget = new WebGLRenderTarget( this._width * this._pixelRatio, this._height * this._pixelRatio, { type: HalfFloatType } );
+			renderTarget.texture.name = 'EffectComposer.rt1';
+
+		} else {
+
+			this._width = renderTarget.width;
+			this._height = renderTarget.height;
+
+		}
+
+		this.renderTarget1 = renderTarget;
+		this.renderTarget2 = renderTarget.clone();
+		this.renderTarget2.texture.name = 'EffectComposer.rt2';
+
+		this.writeBuffer = this.renderTarget1;
+		this.readBuffer = this.renderTarget2;
+
+		this.renderToScreen = true;
+
+		this.passes = [];
+
+		this.copyPass = new ShaderPass( CopyShader );
+		this.copyPass.material.blending = NoBlending;
+
+		this.clock = new Clock();
+
+	}
+
+	swapBuffers() {
+
+		const tmp = this.readBuffer;
+		this.readBuffer = this.writeBuffer;
+		this.writeBuffer = tmp;
+
+	}
+
+	addPass( pass ) {
+
+		this.passes.push( pass );
+		pass.setSize( this._width * this._pixelRatio, this._height * this._pixelRatio );
+
+	}
+
+	insertPass( pass, index ) {
+
+		this.passes.splice( index, 0, pass );
+		pass.setSize( this._width * this._pixelRatio, this._height * this._pixelRatio );
+
+	}
+
+	removePass( pass ) {
+
+		const index = this.passes.indexOf( pass );
+
+		if ( index !== -1 ) {
+
+			this.passes.splice( index, 1 );
+
+		}
+
+	}
+
+	isLastEnabledPass( passIndex ) {
+
+		for ( let i = passIndex + 1; i < this.passes.length; i ++ ) {
+
+			if ( this.passes[ i ].enabled ) {
+
+				return false;
+
+			}
+
+		}
+
+		return true;
+
+	}
+
+	render( deltaTime ) {
+
+		// deltaTime value is in seconds
+
+		if ( deltaTime === undefined ) {
+
+			deltaTime = this.clock.getDelta();
+
+		}
+
+		const currentRenderTarget = this.renderer.getRenderTarget();
+
+		let maskActive = false;
+
+		for ( let i = 0, il = this.passes.length; i < il; i ++ ) {
+
+			const pass = this.passes[ i ];
+
+			if ( pass.enabled === false ) continue;
+
+			pass.renderToScreen = ( this.renderToScreen && this.isLastEnabledPass( i ) );
+			pass.render( this.renderer, this.writeBuffer, this.readBuffer, deltaTime, maskActive );
+
+			if ( pass.needsSwap ) {
+
+				if ( maskActive ) {
+
+					const context = this.renderer.getContext();
+					const stencil = this.renderer.state.buffers.stencil;
+
+					//context.stencilFunc( context.NOTEQUAL, 1, 0xffffffff );
+					stencil.setFunc( context.NOTEQUAL, 1, 0xffffffff );
+
+					this.copyPass.render( this.renderer, this.writeBuffer, this.readBuffer, deltaTime );
+
+					//context.stencilFunc( context.EQUAL, 1, 0xffffffff );
+					stencil.setFunc( context.EQUAL, 1, 0xffffffff );
+
+				}
+
+				this.swapBuffers();
+
+			}
+
+			if ( MaskPass !== undefined ) {
+
+				if ( pass instanceof MaskPass ) {
+
+					maskActive = true;
+
+				} else if ( pass instanceof ClearMaskPass ) {
+
+					maskActive = false;
+
+				}
+
+			}
+
+		}
+
+		this.renderer.setRenderTarget( currentRenderTarget );
+
+	}
+
+	reset( renderTarget ) {
+
+		if ( renderTarget === undefined ) {
+
+			const size = this.renderer.getSize( new Vector2() );
+			this._pixelRatio = this.renderer.getPixelRatio();
+			this._width = size.width;
+			this._height = size.height;
+
+			renderTarget = this.renderTarget1.clone();
+			renderTarget.setSize( this._width * this._pixelRatio, this._height * this._pixelRatio );
+
+		}
+
+		this.renderTarget1.dispose();
+		this.renderTarget2.dispose();
+		this.renderTarget1 = renderTarget;
+		this.renderTarget2 = renderTarget.clone();
+
+		this.writeBuffer = this.renderTarget1;
+		this.readBuffer = this.renderTarget2;
+
+	}
+
+	setSize( width, height ) {
+
+		this._width = width;
+		this._height = height;
+
+		const effectiveWidth = this._width * this._pixelRatio;
+		const effectiveHeight = this._height * this._pixelRatio;
+
+		this.renderTarget1.setSize( effectiveWidth, effectiveHeight );
+		this.renderTarget2.setSize( effectiveWidth, effectiveHeight );
+
+		for ( let i = 0; i < this.passes.length; i ++ ) {
+
+			this.passes[ i ].setSize( effectiveWidth, effectiveHeight );
+
+		}
+
+	}
+
+	setPixelRatio( pixelRatio ) {
+
+		this._pixelRatio = pixelRatio;
+
+		this.setSize( this._width, this._height );
+
+	}
+
+	dispose() {
+
+		this.renderTarget1.dispose();
+		this.renderTarget2.dispose();
+
+		this.copyPass.dispose();
+
+	}
+
+}
+
+class RenderPass extends Pass {
+
+	constructor( scene, camera, overrideMaterial = null, clearColor = null, clearAlpha = null ) {
+
+		super();
+
+		this.scene = scene;
+		this.camera = camera;
+
+		this.overrideMaterial = overrideMaterial;
+
+		this.clearColor = clearColor;
+		this.clearAlpha = clearAlpha;
+
+		this.clear = true;
+		this.clearDepth = false;
+		this.needsSwap = false;
+		this._oldClearColor = new Color();
+
+	}
+
+	render( renderer, writeBuffer, readBuffer /*, deltaTime, maskActive */ ) {
+
+		const oldAutoClear = renderer.autoClear;
+		renderer.autoClear = false;
+
+		let oldClearAlpha, oldOverrideMaterial;
+
+		if ( this.overrideMaterial !== null ) {
+
+			oldOverrideMaterial = this.scene.overrideMaterial;
+
+			this.scene.overrideMaterial = this.overrideMaterial;
+
+		}
+
+		if ( this.clearColor !== null ) {
+
+			renderer.getClearColor( this._oldClearColor );
+			renderer.setClearColor( this.clearColor, renderer.getClearAlpha() );
+
+		}
+
+		if ( this.clearAlpha !== null ) {
+
+			oldClearAlpha = renderer.getClearAlpha();
+			renderer.setClearAlpha( this.clearAlpha );
+
+		}
+
+		if ( this.clearDepth == true ) {
+
+			renderer.clearDepth();
+
+		}
+
+		renderer.setRenderTarget( this.renderToScreen ? null : readBuffer );
+
+		if ( this.clear === true ) {
+
+			// TODO: Avoid using autoClear properties, see https://github.com/mrdoob/three.js/pull/15571#issuecomment-465669600
+			renderer.clear( renderer.autoClearColor, renderer.autoClearDepth, renderer.autoClearStencil );
+
+		}
+
+		renderer.render( this.scene, this.camera );
+
+		// restore
+
+		if ( this.clearColor !== null ) {
+
+			renderer.setClearColor( this._oldClearColor );
+
+		}
+
+		if ( this.clearAlpha !== null ) {
+
+			renderer.setClearAlpha( oldClearAlpha );
+
+		}
+
+		if ( this.overrideMaterial !== null ) {
+
+			this.scene.overrideMaterial = oldOverrideMaterial;
+
+		}
+
+		renderer.autoClear = oldAutoClear;
+
+	}
+
+}
+
+/**
+ * Luminosity
+ * http://en.wikipedia.org/wiki/Luminosity
+ */
+
+const LuminosityHighPassShader = {
+
+	name: 'LuminosityHighPassShader',
+
+	shaderID: 'luminosityHighPass',
+
+	uniforms: {
+
+		'tDiffuse': { value: null },
+		'luminosityThreshold': { value: 1.0 },
+		'smoothWidth': { value: 1.0 },
+		'defaultColor': { value: new Color( 0x000000 ) },
+		'defaultOpacity': { value: 0.0 }
+
+	},
+
+	vertexShader: /* glsl */`
+
+		varying vec2 vUv;
+
+		void main() {
+
+			vUv = uv;
+
+			gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+
+		}`,
+
+	fragmentShader: /* glsl */`
+
+		uniform sampler2D tDiffuse;
+		uniform vec3 defaultColor;
+		uniform float defaultOpacity;
+		uniform float luminosityThreshold;
+		uniform float smoothWidth;
+
+		varying vec2 vUv;
+
+		void main() {
+
+			vec4 texel = texture2D( tDiffuse, vUv );
+
+			float v = luminance( texel.xyz );
+
+			vec4 outputColor = vec4( defaultColor.rgb, defaultOpacity );
+
+			float alpha = smoothstep( luminosityThreshold, luminosityThreshold + smoothWidth, v );
+
+			gl_FragColor = mix( outputColor, texel, alpha );
+
+		}`
+
+};
+
+/**
+ * UnrealBloomPass is inspired by the bloom pass of Unreal Engine. It creates a
+ * mip map chain of bloom textures and blurs them with different radii. Because
+ * of the weighted combination of mips, and because larger blurs are done on
+ * higher mips, this effect provides good quality and performance.
+ *
+ * Reference:
+ * - https://docs.unrealengine.com/latest/INT/Engine/Rendering/PostProcessEffects/Bloom/
+ */
+class UnrealBloomPass extends Pass {
+
+	constructor( resolution, strength, radius, threshold ) {
+
+		super();
+
+		this.strength = ( strength !== undefined ) ? strength : 1;
+		this.radius = radius;
+		this.threshold = threshold;
+		this.resolution = ( resolution !== undefined ) ? new Vector2( resolution.x, resolution.y ) : new Vector2( 256, 256 );
+
+		// create color only once here, reuse it later inside the render function
+		this.clearColor = new Color( 0, 0, 0 );
+
+		// render targets
+		this.renderTargetsHorizontal = [];
+		this.renderTargetsVertical = [];
+		this.nMips = 5;
+		let resx = Math.round( this.resolution.x / 2 );
+		let resy = Math.round( this.resolution.y / 2 );
+
+		this.renderTargetBright = new WebGLRenderTarget( resx, resy, { type: HalfFloatType } );
+		this.renderTargetBright.texture.name = 'UnrealBloomPass.bright';
+		this.renderTargetBright.texture.generateMipmaps = false;
+
+		for ( let i = 0; i < this.nMips; i ++ ) {
+
+			const renderTargetHorizontal = new WebGLRenderTarget( resx, resy, { type: HalfFloatType } );
+
+			renderTargetHorizontal.texture.name = 'UnrealBloomPass.h' + i;
+			renderTargetHorizontal.texture.generateMipmaps = false;
+
+			this.renderTargetsHorizontal.push( renderTargetHorizontal );
+
+			const renderTargetVertical = new WebGLRenderTarget( resx, resy, { type: HalfFloatType } );
+
+			renderTargetVertical.texture.name = 'UnrealBloomPass.v' + i;
+			renderTargetVertical.texture.generateMipmaps = false;
+
+			this.renderTargetsVertical.push( renderTargetVertical );
+
+			resx = Math.round( resx / 2 );
+
+			resy = Math.round( resy / 2 );
+
+		}
+
+		// luminosity high pass material
+
+		const highPassShader = LuminosityHighPassShader;
+		this.highPassUniforms = UniformsUtils.clone( highPassShader.uniforms );
+
+		this.highPassUniforms[ 'luminosityThreshold' ].value = threshold;
+		this.highPassUniforms[ 'smoothWidth' ].value = 0.01;
+
+		this.materialHighPassFilter = new ShaderMaterial( {
+			uniforms: this.highPassUniforms,
+			vertexShader: highPassShader.vertexShader,
+			fragmentShader: highPassShader.fragmentShader
+		} );
+
+		// gaussian blur materials
+
+		this.separableBlurMaterials = [];
+		const kernelSizeArray = [ 3, 5, 7, 9, 11 ];
+		resx = Math.round( this.resolution.x / 2 );
+		resy = Math.round( this.resolution.y / 2 );
+
+		for ( let i = 0; i < this.nMips; i ++ ) {
+
+			this.separableBlurMaterials.push( this.getSeparableBlurMaterial( kernelSizeArray[ i ] ) );
+
+			this.separableBlurMaterials[ i ].uniforms[ 'invSize' ].value = new Vector2( 1 / resx, 1 / resy );
+
+			resx = Math.round( resx / 2 );
+
+			resy = Math.round( resy / 2 );
+
+		}
+
+		// composite material
+
+		this.compositeMaterial = this.getCompositeMaterial( this.nMips );
+		this.compositeMaterial.uniforms[ 'blurTexture1' ].value = this.renderTargetsVertical[ 0 ].texture;
+		this.compositeMaterial.uniforms[ 'blurTexture2' ].value = this.renderTargetsVertical[ 1 ].texture;
+		this.compositeMaterial.uniforms[ 'blurTexture3' ].value = this.renderTargetsVertical[ 2 ].texture;
+		this.compositeMaterial.uniforms[ 'blurTexture4' ].value = this.renderTargetsVertical[ 3 ].texture;
+		this.compositeMaterial.uniforms[ 'blurTexture5' ].value = this.renderTargetsVertical[ 4 ].texture;
+		this.compositeMaterial.uniforms[ 'bloomStrength' ].value = strength;
+		this.compositeMaterial.uniforms[ 'bloomRadius' ].value = 0.1;
+
+		const bloomFactors = [ 1.0, 0.8, 0.6, 0.4, 0.2 ];
+		this.compositeMaterial.uniforms[ 'bloomFactors' ].value = bloomFactors;
+		this.bloomTintColors = [ new Vector3( 1, 1, 1 ), new Vector3( 1, 1, 1 ), new Vector3( 1, 1, 1 ), new Vector3( 1, 1, 1 ), new Vector3( 1, 1, 1 ) ];
+		this.compositeMaterial.uniforms[ 'bloomTintColors' ].value = this.bloomTintColors;
+
+		// blend material
+
+		const copyShader = CopyShader;
+
+		this.copyUniforms = UniformsUtils.clone( copyShader.uniforms );
+
+		this.blendMaterial = new ShaderMaterial( {
+			uniforms: this.copyUniforms,
+			vertexShader: copyShader.vertexShader,
+			fragmentShader: copyShader.fragmentShader,
+			blending: AdditiveBlending,
+			depthTest: false,
+			depthWrite: false,
+			transparent: true
+		} );
+
+		this.enabled = true;
+		this.needsSwap = false;
+
+		this._oldClearColor = new Color();
+		this.oldClearAlpha = 1;
+
+		this.basic = new MeshBasicMaterial();
+
+		this.fsQuad = new FullScreenQuad( null );
+
+	}
+
+	dispose() {
+
+		for ( let i = 0; i < this.renderTargetsHorizontal.length; i ++ ) {
+
+			this.renderTargetsHorizontal[ i ].dispose();
+
+		}
+
+		for ( let i = 0; i < this.renderTargetsVertical.length; i ++ ) {
+
+			this.renderTargetsVertical[ i ].dispose();
+
+		}
+
+		this.renderTargetBright.dispose();
+
+		//
+
+		for ( let i = 0; i < this.separableBlurMaterials.length; i ++ ) {
+
+			this.separableBlurMaterials[ i ].dispose();
+
+		}
+
+		this.compositeMaterial.dispose();
+		this.blendMaterial.dispose();
+		this.basic.dispose();
+
+		//
+
+		this.fsQuad.dispose();
+
+	}
+
+	setSize( width, height ) {
+
+		let resx = Math.round( width / 2 );
+		let resy = Math.round( height / 2 );
+
+		this.renderTargetBright.setSize( resx, resy );
+
+		for ( let i = 0; i < this.nMips; i ++ ) {
+
+			this.renderTargetsHorizontal[ i ].setSize( resx, resy );
+			this.renderTargetsVertical[ i ].setSize( resx, resy );
+
+			this.separableBlurMaterials[ i ].uniforms[ 'invSize' ].value = new Vector2( 1 / resx, 1 / resy );
+
+			resx = Math.round( resx / 2 );
+			resy = Math.round( resy / 2 );
+
+		}
+
+	}
+
+	render( renderer, writeBuffer, readBuffer, deltaTime, maskActive ) {
+
+		renderer.getClearColor( this._oldClearColor );
+		this.oldClearAlpha = renderer.getClearAlpha();
+		const oldAutoClear = renderer.autoClear;
+		renderer.autoClear = false;
+
+		renderer.setClearColor( this.clearColor, 0 );
+
+		if ( maskActive ) renderer.state.buffers.stencil.setTest( false );
+
+		// Render input to screen
+
+		if ( this.renderToScreen ) {
+
+			this.fsQuad.material = this.basic;
+			this.basic.map = readBuffer.texture;
+
+			renderer.setRenderTarget( null );
+			renderer.clear();
+			this.fsQuad.render( renderer );
+
+		}
+
+		// 1. Extract Bright Areas
+
+		this.highPassUniforms[ 'tDiffuse' ].value = readBuffer.texture;
+		this.highPassUniforms[ 'luminosityThreshold' ].value = this.threshold;
+		this.fsQuad.material = this.materialHighPassFilter;
+
+		renderer.setRenderTarget( this.renderTargetBright );
+		renderer.clear();
+		this.fsQuad.render( renderer );
+
+		// 2. Blur All the mips progressively
+
+		let inputRenderTarget = this.renderTargetBright;
+
+		for ( let i = 0; i < this.nMips; i ++ ) {
+
+			this.fsQuad.material = this.separableBlurMaterials[ i ];
+
+			this.separableBlurMaterials[ i ].uniforms[ 'colorTexture' ].value = inputRenderTarget.texture;
+			this.separableBlurMaterials[ i ].uniforms[ 'direction' ].value = UnrealBloomPass.BlurDirectionX;
+			renderer.setRenderTarget( this.renderTargetsHorizontal[ i ] );
+			renderer.clear();
+			this.fsQuad.render( renderer );
+
+			this.separableBlurMaterials[ i ].uniforms[ 'colorTexture' ].value = this.renderTargetsHorizontal[ i ].texture;
+			this.separableBlurMaterials[ i ].uniforms[ 'direction' ].value = UnrealBloomPass.BlurDirectionY;
+			renderer.setRenderTarget( this.renderTargetsVertical[ i ] );
+			renderer.clear();
+			this.fsQuad.render( renderer );
+
+			inputRenderTarget = this.renderTargetsVertical[ i ];
+
+		}
+
+		// Composite All the mips
+
+		this.fsQuad.material = this.compositeMaterial;
+		this.compositeMaterial.uniforms[ 'bloomStrength' ].value = this.strength;
+		this.compositeMaterial.uniforms[ 'bloomRadius' ].value = this.radius;
+		this.compositeMaterial.uniforms[ 'bloomTintColors' ].value = this.bloomTintColors;
+
+		renderer.setRenderTarget( this.renderTargetsHorizontal[ 0 ] );
+		renderer.clear();
+		this.fsQuad.render( renderer );
+
+		// Blend it additively over the input texture
+
+		this.fsQuad.material = this.blendMaterial;
+		this.copyUniforms[ 'tDiffuse' ].value = this.renderTargetsHorizontal[ 0 ].texture;
+
+		if ( maskActive ) renderer.state.buffers.stencil.setTest( true );
+
+		if ( this.renderToScreen ) {
+
+			renderer.setRenderTarget( null );
+			this.fsQuad.render( renderer );
+
+		} else {
+
+			renderer.setRenderTarget( readBuffer );
+			this.fsQuad.render( renderer );
+
+		}
+
+		// Restore renderer settings
+
+		renderer.setClearColor( this._oldClearColor, this.oldClearAlpha );
+		renderer.autoClear = oldAutoClear;
+
+	}
+
+	getSeparableBlurMaterial( kernelRadius ) {
+
+		const coefficients = [];
+
+		for ( let i = 0; i < kernelRadius; i ++ ) {
+
+			coefficients.push( 0.39894 * Math.exp( -0.5 * i * i / ( kernelRadius * kernelRadius ) ) / kernelRadius );
+
+		}
+
+		return new ShaderMaterial( {
+
+			defines: {
+				'KERNEL_RADIUS': kernelRadius
+			},
+
+			uniforms: {
+				'colorTexture': { value: null },
+				'invSize': { value: new Vector2( 0.5, 0.5 ) }, // inverse texture size
+				'direction': { value: new Vector2( 0.5, 0.5 ) },
+				'gaussianCoefficients': { value: coefficients } // precomputed Gaussian coefficients
+			},
+
+			vertexShader:
+				`varying vec2 vUv;
+				void main() {
+					vUv = uv;
+					gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+				}`,
+
+			fragmentShader:
+				`#include <common>
+				varying vec2 vUv;
+				uniform sampler2D colorTexture;
+				uniform vec2 invSize;
+				uniform vec2 direction;
+				uniform float gaussianCoefficients[KERNEL_RADIUS];
+
+				void main() {
+					float weightSum = gaussianCoefficients[0];
+					vec3 diffuseSum = texture2D( colorTexture, vUv ).rgb * weightSum;
+					for( int i = 1; i < KERNEL_RADIUS; i ++ ) {
+						float x = float(i);
+						float w = gaussianCoefficients[i];
+						vec2 uvOffset = direction * invSize * x;
+						vec3 sample1 = texture2D( colorTexture, vUv + uvOffset ).rgb;
+						vec3 sample2 = texture2D( colorTexture, vUv - uvOffset ).rgb;
+						diffuseSum += (sample1 + sample2) * w;
+						weightSum += 2.0 * w;
+					}
+					gl_FragColor = vec4(diffuseSum/weightSum, 1.0);
+				}`
+		} );
+
+	}
+
+	getCompositeMaterial( nMips ) {
+
+		return new ShaderMaterial( {
+
+			defines: {
+				'NUM_MIPS': nMips
+			},
+
+			uniforms: {
+				'blurTexture1': { value: null },
+				'blurTexture2': { value: null },
+				'blurTexture3': { value: null },
+				'blurTexture4': { value: null },
+				'blurTexture5': { value: null },
+				'bloomStrength': { value: 1.0 },
+				'bloomFactors': { value: null },
+				'bloomTintColors': { value: null },
+				'bloomRadius': { value: 0.0 }
+			},
+
+			vertexShader:
+				`varying vec2 vUv;
+				void main() {
+					vUv = uv;
+					gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+				}`,
+
+			fragmentShader:
+				`varying vec2 vUv;
+				uniform sampler2D blurTexture1;
+				uniform sampler2D blurTexture2;
+				uniform sampler2D blurTexture3;
+				uniform sampler2D blurTexture4;
+				uniform sampler2D blurTexture5;
+				uniform float bloomStrength;
+				uniform float bloomRadius;
+				uniform float bloomFactors[NUM_MIPS];
+				uniform vec3 bloomTintColors[NUM_MIPS];
+
+				float lerpBloomFactor(const in float factor) {
+					float mirrorFactor = 1.2 - factor;
+					return mix(factor, mirrorFactor, bloomRadius);
+				}
+
+				void main() {
+					gl_FragColor = bloomStrength * ( lerpBloomFactor(bloomFactors[0]) * vec4(bloomTintColors[0], 1.0) * texture2D(blurTexture1, vUv) +
+						lerpBloomFactor(bloomFactors[1]) * vec4(bloomTintColors[1], 1.0) * texture2D(blurTexture2, vUv) +
+						lerpBloomFactor(bloomFactors[2]) * vec4(bloomTintColors[2], 1.0) * texture2D(blurTexture3, vUv) +
+						lerpBloomFactor(bloomFactors[3]) * vec4(bloomTintColors[3], 1.0) * texture2D(blurTexture4, vUv) +
+						lerpBloomFactor(bloomFactors[4]) * vec4(bloomTintColors[4], 1.0) * texture2D(blurTexture5, vUv) );
+				}`
+		} );
+
+	}
+
+}
+
+UnrealBloomPass.BlurDirectionX = new Vector2( 1.0, 0.0 );
+UnrealBloomPass.BlurDirectionY = new Vector2( 0.0, 1.0 );
+
+const OutputShader = {
+
+	name: 'OutputShader',
+
+	uniforms: {
+
+		'tDiffuse': { value: null },
+		'toneMappingExposure': { value: 1 }
+
+	},
+
+	vertexShader: /* glsl */`
+		precision highp float;
+
+		uniform mat4 modelViewMatrix;
+		uniform mat4 projectionMatrix;
+
+		attribute vec3 position;
+		attribute vec2 uv;
+
+		varying vec2 vUv;
+
+		void main() {
+
+			vUv = uv;
+			gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+
+		}`,
+
+	fragmentShader: /* glsl */`
+	
+		precision highp float;
+
+		uniform sampler2D tDiffuse;
+
+		#include <tonemapping_pars_fragment>
+		#include <colorspace_pars_fragment>
+
+		varying vec2 vUv;
+
+		void main() {
+
+			gl_FragColor = texture2D( tDiffuse, vUv );
+
+			// tone mapping
+
+			#ifdef LINEAR_TONE_MAPPING
+
+				gl_FragColor.rgb = LinearToneMapping( gl_FragColor.rgb );
+
+			#elif defined( REINHARD_TONE_MAPPING )
+
+				gl_FragColor.rgb = ReinhardToneMapping( gl_FragColor.rgb );
+
+			#elif defined( CINEON_TONE_MAPPING )
+
+				gl_FragColor.rgb = CineonToneMapping( gl_FragColor.rgb );
+
+			#elif defined( ACES_FILMIC_TONE_MAPPING )
+
+				gl_FragColor.rgb = ACESFilmicToneMapping( gl_FragColor.rgb );
+
+			#elif defined( AGX_TONE_MAPPING )
+
+				gl_FragColor.rgb = AgXToneMapping( gl_FragColor.rgb );
+
+			#elif defined( NEUTRAL_TONE_MAPPING )
+
+				gl_FragColor.rgb = NeutralToneMapping( gl_FragColor.rgb );
+
+			#endif
+
+			// color space
+
+			#ifdef SRGB_TRANSFER
+
+				gl_FragColor = sRGBTransferOETF( gl_FragColor );
+
+			#endif
+
+		}`
+
+};
+
+class OutputPass extends Pass {
+
+	constructor() {
+
+		super();
+
+		//
+
+		const shader = OutputShader;
+
+		this.uniforms = UniformsUtils.clone( shader.uniforms );
+
+		this.material = new RawShaderMaterial( {
+			name: shader.name,
+			uniforms: this.uniforms,
+			vertexShader: shader.vertexShader,
+			fragmentShader: shader.fragmentShader
+		} );
+
+		this.fsQuad = new FullScreenQuad( this.material );
+
+		// internal cache
+
+		this._outputColorSpace = null;
+		this._toneMapping = null;
+
+	}
+
+	render( renderer, writeBuffer, readBuffer/*, deltaTime, maskActive */ ) {
+
+		this.uniforms[ 'tDiffuse' ].value = readBuffer.texture;
+		this.uniforms[ 'toneMappingExposure' ].value = renderer.toneMappingExposure;
+
+		// rebuild defines if required
+
+		if ( this._outputColorSpace !== renderer.outputColorSpace || this._toneMapping !== renderer.toneMapping ) {
+
+			this._outputColorSpace = renderer.outputColorSpace;
+			this._toneMapping = renderer.toneMapping;
+
+			this.material.defines = {};
+
+			if ( ColorManagement.getTransfer( this._outputColorSpace ) === SRGBTransfer ) this.material.defines.SRGB_TRANSFER = '';
+
+			if ( this._toneMapping === LinearToneMapping ) this.material.defines.LINEAR_TONE_MAPPING = '';
+			else if ( this._toneMapping === ReinhardToneMapping ) this.material.defines.REINHARD_TONE_MAPPING = '';
+			else if ( this._toneMapping === CineonToneMapping ) this.material.defines.CINEON_TONE_MAPPING = '';
+			else if ( this._toneMapping === ACESFilmicToneMapping ) this.material.defines.ACES_FILMIC_TONE_MAPPING = '';
+			else if ( this._toneMapping === AgXToneMapping ) this.material.defines.AGX_TONE_MAPPING = '';
+			else if ( this._toneMapping === NeutralToneMapping ) this.material.defines.NEUTRAL_TONE_MAPPING = '';
+
+			this.material.needsUpdate = true;
+
+		}
+
+		//
+
+		if ( this.renderToScreen === true ) {
+
+			renderer.setRenderTarget( null );
+			this.fsQuad.render( renderer );
+
+		} else {
+
+			renderer.setRenderTarget( writeBuffer );
+			if ( this.clear ) renderer.clear( renderer.autoClearColor, renderer.autoClearDepth, renderer.autoClearStencil );
+			this.fsQuad.render( renderer );
+
+		}
+
+	}
+
+	dispose() {
+
+		this.material.dispose();
+		this.fsQuad.dispose();
+
+	}
+
+}
 
 class DeltaFrame{
   frame = null;
@@ -263,6 +1500,12 @@ class GLTFLoader extends Loader {
 
 		this.register( function ( parser ) {
 
+			return new GLTFMaterialsDispersionExtension( parser );
+
+		} );
+
+		this.register( function ( parser ) {
+
 			return new GLTFTextureBasisUExtension( parser );
 
 		} );
@@ -329,6 +1572,12 @@ class GLTFLoader extends Loader {
 
 		this.register( function ( parser ) {
 
+			return new GLTFMaterialsBumpExtension( parser );
+
+		} );
+
+		this.register( function ( parser ) {
+
 			return new GLTFLightsExtension( parser );
 
 		} );
@@ -359,7 +1608,13 @@ class GLTFLoader extends Loader {
 
 		} else if ( this.path !== '' ) {
 
-			resourcePath = this.path;
+			// If a base path is set, resources will be relative paths from that plus the relative path of the gltf file
+			// Example  path = 'https://my-cnd-server.com/', url = 'assets/models/model.gltf'
+			// resourcePath = 'https://my-cnd-server.com/assets/models/'
+			// referenced resource 'model.bin' will be loaded from 'https://my-cnd-server.com/assets/models/model.bin'
+			// referenced resource '../textures/texture.png' will be loaded from 'https://my-cnd-server.com/assets/textures/texture.png'
+			const relativeUrl = LoaderUtils.extractUrlBase( url );
+			resourcePath = LoaderUtils.resolveURL( relativeUrl, this.path );
 
 		} else {
 
@@ -422,16 +1677,6 @@ class GLTFLoader extends Loader {
 
 		this.dracoLoader = dracoLoader;
 		return this;
-
-	}
-
-	setDDSLoader() {
-
-		throw new Error(
-
-			'THREE.GLTFLoader: "MSFT_texture_dds" no longer supported. Please update to "KHR_texture_basisu".'
-
-		);
 
 	}
 
@@ -538,6 +1783,9 @@ class GLTFLoader extends Loader {
 		for ( let i = 0; i < this.pluginCallbacks.length; i ++ ) {
 
 			const plugin = this.pluginCallbacks[ i ]( parser );
+
+			if ( ! plugin.name ) console.error( 'THREE.GLTFLoader: Invalid plugin found: missing name' );
+
 			plugins[ plugin.name ] = plugin;
 
 			// Workaround to avoid determining as unknown extension
@@ -652,6 +1900,7 @@ const EXTENSIONS = {
 	KHR_DRACO_MESH_COMPRESSION: 'KHR_draco_mesh_compression',
 	KHR_LIGHTS_PUNCTUAL: 'KHR_lights_punctual',
 	KHR_MATERIALS_CLEARCOAT: 'KHR_materials_clearcoat',
+	KHR_MATERIALS_DISPERSION: 'KHR_materials_dispersion',
 	KHR_MATERIALS_IOR: 'KHR_materials_ior',
 	KHR_MATERIALS_SHEEN: 'KHR_materials_sheen',
 	KHR_MATERIALS_SPECULAR: 'KHR_materials_specular',
@@ -664,6 +1913,7 @@ const EXTENSIONS = {
 	KHR_TEXTURE_TRANSFORM: 'KHR_texture_transform',
 	KHR_MESH_QUANTIZATION: 'KHR_mesh_quantization',
 	KHR_MATERIALS_EMISSIVE_STRENGTH: 'KHR_materials_emissive_strength',
+	EXT_MATERIALS_BUMP: 'EXT_materials_bump',
 	EXT_TEXTURE_WEBP: 'EXT_texture_webp',
 	EXT_TEXTURE_AVIF: 'EXT_texture_avif',
 	EXT_MESHOPT_COMPRESSION: 'EXT_meshopt_compression',
@@ -724,7 +1974,7 @@ class GLTFLightsExtension {
 
 		const color = new Color( 0xffffff );
 
-		if ( lightDef.color !== undefined ) color.fromArray( lightDef.color );
+		if ( lightDef.color !== undefined ) color.setRGB( lightDef.color[ 0 ], lightDef.color[ 1 ], lightDef.color[ 2 ], LinearSRGBColorSpace );
 
 		const range = lightDef.range !== undefined ? lightDef.range : 0;
 
@@ -842,7 +2092,7 @@ class GLTFMaterialsUnlitExtension {
 
 				const array = metallicRoughness.baseColorFactor;
 
-				materialParams.color.fromArray( array );
+				materialParams.color.setRGB( array[ 0 ], array[ 1 ], array[ 2 ], LinearSRGBColorSpace );
 				materialParams.opacity = array[ 3 ];
 
 			}
@@ -985,6 +2235,52 @@ class GLTFMaterialsClearcoatExtension {
 }
 
 /**
+ * Materials dispersion Extension
+ *
+ * Specification: https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_materials_dispersion
+ */
+class GLTFMaterialsDispersionExtension {
+
+	constructor( parser ) {
+
+		this.parser = parser;
+		this.name = EXTENSIONS.KHR_MATERIALS_DISPERSION;
+
+	}
+
+	getMaterialType( materialIndex ) {
+
+		const parser = this.parser;
+		const materialDef = parser.json.materials[ materialIndex ];
+
+		if ( ! materialDef.extensions || ! materialDef.extensions[ this.name ] ) return null;
+
+		return MeshPhysicalMaterial;
+
+	}
+
+	extendMaterialParams( materialIndex, materialParams ) {
+
+		const parser = this.parser;
+		const materialDef = parser.json.materials[ materialIndex ];
+
+		if ( ! materialDef.extensions || ! materialDef.extensions[ this.name ] ) {
+
+			return Promise.resolve();
+
+		}
+
+		const extension = materialDef.extensions[ this.name ];
+
+		materialParams.dispersion = extension.dispersion !== undefined ? extension.dispersion : 0;
+
+		return Promise.resolve();
+
+	}
+
+}
+
+/**
  * Iridescence Materials Extension
  *
  * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_materials_iridescence
@@ -1118,7 +2414,8 @@ class GLTFMaterialsSheenExtension {
 
 		if ( extension.sheenColorFactor !== undefined ) {
 
-			materialParams.sheenColor.fromArray( extension.sheenColorFactor );
+			const colorFactor = extension.sheenColorFactor;
+			materialParams.sheenColor.setRGB( colorFactor[ 0 ], colorFactor[ 1 ], colorFactor[ 2 ], LinearSRGBColorSpace );
 
 		}
 
@@ -1256,7 +2553,7 @@ class GLTFMaterialsVolumeExtension {
 		materialParams.attenuationDistance = extension.attenuationDistance || Infinity;
 
 		const colorArray = extension.attenuationColor || [ 1, 1, 1 ];
-		materialParams.attenuationColor = new Color( colorArray[ 0 ], colorArray[ 1 ], colorArray[ 2 ] );
+		materialParams.attenuationColor = new Color().setRGB( colorArray[ 0 ], colorArray[ 1 ], colorArray[ 2 ], LinearSRGBColorSpace );
 
 		return Promise.all( pending );
 
@@ -1359,11 +2656,66 @@ class GLTFMaterialsSpecularExtension {
 		}
 
 		const colorArray = extension.specularColorFactor || [ 1, 1, 1 ];
-		materialParams.specularColor = new Color( colorArray[ 0 ], colorArray[ 1 ], colorArray[ 2 ] );
+		materialParams.specularColor = new Color().setRGB( colorArray[ 0 ], colorArray[ 1 ], colorArray[ 2 ], LinearSRGBColorSpace );
 
 		if ( extension.specularColorTexture !== undefined ) {
 
 			pending.push( parser.assignTexture( materialParams, 'specularColorMap', extension.specularColorTexture, SRGBColorSpace ) );
+
+		}
+
+		return Promise.all( pending );
+
+	}
+
+}
+
+
+/**
+ * Materials bump Extension
+ *
+ * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/EXT_materials_bump
+ */
+class GLTFMaterialsBumpExtension {
+
+	constructor( parser ) {
+
+		this.parser = parser;
+		this.name = EXTENSIONS.EXT_MATERIALS_BUMP;
+
+	}
+
+	getMaterialType( materialIndex ) {
+
+		const parser = this.parser;
+		const materialDef = parser.json.materials[ materialIndex ];
+
+		if ( ! materialDef.extensions || ! materialDef.extensions[ this.name ] ) return null;
+
+		return MeshPhysicalMaterial;
+
+	}
+
+	extendMaterialParams( materialIndex, materialParams ) {
+
+		const parser = this.parser;
+		const materialDef = parser.json.materials[ materialIndex ];
+
+		if ( ! materialDef.extensions || ! materialDef.extensions[ this.name ] ) {
+
+			return Promise.resolve();
+
+		}
+
+		const pending = [];
+
+		const extension = materialDef.extensions[ this.name ];
+
+		materialParams.bumpScale = extension.bumpFactor !== undefined ? extension.bumpFactor : 1.0;
+
+		if ( extension.bumpTexture !== undefined ) {
+
+			pending.push( parser.assignTexture( materialParams, 'bumpMap', extension.bumpTexture ) );
 
 		}
 
@@ -1855,7 +3207,12 @@ class GLTFMeshGpuInstancing {
 				// Add instance attributes to the geometry, excluding TRS.
 				for ( const attributeName in attributes ) {
 
-					if ( attributeName !== 'TRANSLATION' &&
+					if ( attributeName === '_COLOR_0' ) {
+
+						const attr = attributes[ attributeName ];
+						instancedMesh.instanceColor = new InstancedBufferAttribute( attr.array, attr.itemSize, attr.normalized );
+
+					} else if ( attributeName !== 'TRANSLATION' &&
 						 attributeName !== 'ROTATION' &&
 						 attributeName !== 'SCALE' ) {
 
@@ -2022,7 +3379,7 @@ class GLTFDracoMeshCompressionExtension {
 
 		return parser.getDependency( 'bufferView', bufferViewIndex ).then( function ( bufferView ) {
 
-			return new Promise( function ( resolve ) {
+			return new Promise( function ( resolve, reject ) {
 
 				dracoLoader.decodeDracoFile( bufferView, function ( geometry ) {
 
@@ -2037,7 +3394,7 @@ class GLTFDracoMeshCompressionExtension {
 
 					resolve( geometry );
 
-				}, threeAttributeMap, attributeTypeMap );
+				}, threeAttributeMap, attributeTypeMap, LinearSRGBColorSpace, reject );
 
 			} );
 
@@ -2311,6 +3668,9 @@ const ALPHA_MODES = {
 
 /**
  * Specification: https://github.com/KhronosGroup/glTF/blob/master/specification/2.0/README.md#default-material
+ *
+ * @param {Object<String, Material>} cache
+ * @return {Material}
  */
 function createDefaultMaterial( cache ) {
 
@@ -2581,6 +3941,7 @@ function getImageURIMimeType( uri ) {
 
 	if ( uri.search( /\.jpe?g($|\?)/i ) > 0 || uri.search( /^data\:image\/jpeg/ ) === 0 ) return 'image/jpeg';
 	if ( uri.search( /\.webp($|\?)/i ) > 0 || uri.search( /^data\:image\/webp/ ) === 0 ) return 'image/webp';
+	if ( uri.search( /\.ktx2($|\?)/i ) > 0 || uri.search( /^data\:image\/ktx2/ ) === 0 ) return 'image/ktx2';
 
 	return 'image/png';
 
@@ -2626,18 +3987,24 @@ class GLTFParser {
 		// expensive work of uploading a texture to the GPU off the main thread.
 
 		let isSafari = false;
+		let safariVersion = -1;
 		let isFirefox = false;
 		let firefoxVersion = -1;
 
 		if ( typeof navigator !== 'undefined' ) {
 
-			isSafari = /^((?!chrome|android).)*safari/i.test( navigator.userAgent ) === true;
-			isFirefox = navigator.userAgent.indexOf( 'Firefox' ) > -1;
-			firefoxVersion = isFirefox ? navigator.userAgent.match( /Firefox\/([0-9]+)\./ )[ 1 ] : -1;
+			const userAgent = navigator.userAgent;
+
+			isSafari = /^((?!chrome|android).)*safari/i.test( userAgent ) === true;
+			const safariMatch = userAgent.match( /Version\/(\d+)/ );
+			safariVersion = isSafari && safariMatch ? parseInt( safariMatch[ 1 ], 10 ) : -1;
+
+			isFirefox = userAgent.indexOf( 'Firefox' ) > -1;
+			firefoxVersion = isFirefox ? userAgent.match( /Firefox\/([0-9]+)\./ )[ 1 ] : -1;
 
 		}
 
-		if ( typeof createImageBitmap === 'undefined' || isSafari || ( isFirefox && firefoxVersion < 98 ) ) {
+		if ( typeof createImageBitmap === 'undefined' || ( isSafari && safariVersion < 17 ) || ( isFirefox && firefoxVersion < 98 ) ) {
 
 			this.textureLoader = new TextureLoader( this.options.manager );
 
@@ -2720,11 +4087,17 @@ class GLTFParser {
 
 			assignExtrasToUserData( result, json );
 
-			Promise.all( parser._invokeAll( function ( ext ) {
+			return Promise.all( parser._invokeAll( function ( ext ) {
 
 				return ext.afterRoot && ext.afterRoot( result );
 
 			} ) ).then( function () {
+
+				for ( const scene of result.scenes ) {
+
+					scene.updateMatrixWorld();
+
+				}
 
 				onLoad( result );
 
@@ -2796,6 +4169,9 @@ class GLTFParser {
 	 * Textures) can be reused directly and are not marked here.
 	 *
 	 * Example: CesiumMilkTruck sample model reuses "Wheel" meshes.
+	 *
+	 * @param {Object} cache
+	 * @param {Object3D} index
 	 */
 	_addNodeRef( cache, index ) {
 
@@ -2811,7 +4187,14 @@ class GLTFParser {
 
 	}
 
-	/** Returns a reference to a shared resource, cloning it if necessary. */
+	/**
+	 * Returns a reference to a shared resource, cloning it if necessary.
+	 *
+	 * @param {Object} cache
+	 * @param {Number} index
+	 * @param {Object} object
+	 * @return {Object}
+	 */
 	_getNodeRef( cache, index, object ) {
 
 		if ( cache.refs[ index ] <= 1 ) return object;
@@ -3187,6 +4570,9 @@ class GLTFParser {
 
 				}
 
+				// Ignore normalized since we copy from sparse
+				bufferAttribute.normalized = false;
+
 				for ( let i = 0, il = sparseIndices.length; i < il; i ++ ) {
 
 					const index = sparseIndices[ i ];
@@ -3198,6 +4584,8 @@ class GLTFParser {
 					if ( itemSize >= 5 ) throw new Error( 'THREE.GLTFLoader: Unsupported itemSize in sparse BufferAttribute.' );
 
 				}
+
+				bufferAttribute.normalized = normalized;
 
 			}
 
@@ -3269,6 +4657,7 @@ class GLTFParser {
 			texture.minFilter = WEBGL_FILTERS[ sampler.minFilter ] || LinearMipmapLinearFilter;
 			texture.wrapS = WEBGL_WRAPPINGS[ sampler.wrapS ] || RepeatWrapping;
 			texture.wrapT = WEBGL_WRAPPINGS[ sampler.wrapT ] || RepeatWrapping;
+			texture.generateMipmaps = ! texture.isCompressedTexture && texture.minFilter !== NearestFilter && texture.minFilter !== LinearFilter;
 
 			parser.associations.set( texture, { textures: textureIndex } );
 
@@ -3357,6 +4746,8 @@ class GLTFParser {
 
 			}
 
+			assignExtrasToUserData( texture, sourceDef );
+
 			texture.userData.mimeType = sourceDef.mimeType || getImageURIMimeType( sourceDef.uri );
 
 			return texture;
@@ -3375,9 +4766,11 @@ class GLTFParser {
 
 	/**
 	 * Asynchronously assigns a texture to the given material parameters.
+	 *
 	 * @param {Object} materialParams
 	 * @param {string} mapName
 	 * @param {Object} mapDef
+	 * @param {string} colorSpace
 	 * @return {Promise<Texture>}
 	 */
 	assignTexture( materialParams, mapName, mapDef, colorSpace ) {
@@ -3565,7 +4958,7 @@ class GLTFParser {
 
 				const array = metallicRoughness.baseColorFactor;
 
-				materialParams.color.fromArray( array );
+				materialParams.color.setRGB( array[ 0 ], array[ 1 ], array[ 2 ], LinearSRGBColorSpace );
 				materialParams.opacity = array[ 3 ];
 
 			}
@@ -3657,7 +5050,8 @@ class GLTFParser {
 
 		if ( materialDef.emissiveFactor !== undefined && materialType !== MeshBasicMaterial ) {
 
-			materialParams.emissive = new Color().fromArray( materialDef.emissiveFactor );
+			const emissiveFactor = materialDef.emissiveFactor;
+			materialParams.emissive = new Color().setRGB( emissiveFactor[ 0 ], emissiveFactor[ 1 ], emissiveFactor[ 2 ], LinearSRGBColorSpace );
 
 		}
 
@@ -3685,7 +5079,12 @@ class GLTFParser {
 
 	}
 
-	/** When Object3D instances are targeted by animation, they need unique names. */
+	/**
+	 * When Object3D instances are targeted by animation, they need unique names.
+	 *
+	 * @param {String} originalName
+	 * @return {String}
+	 */
 	createUniqueName( originalName ) {
 
 		const sanitizedName = PropertyBinding.sanitizeNodeName( originalName || '' );
@@ -4036,6 +5435,7 @@ class GLTFParser {
 	loadAnimation( animationIndex ) {
 
 		const json = this.json;
+		const parser = this;
 
 		const animationDef = json.animations[ animationIndex ];
 		const animationName = animationDef.name ? animationDef.name : 'animation_' + animationIndex;
@@ -4093,102 +5493,21 @@ class GLTFParser {
 
 				if ( node === undefined ) continue;
 
-				node.updateMatrix();
+				if ( node.updateMatrix ) {
 
-				let TypedKeyframeTrack;
-
-				switch ( PATH_PROPERTIES[ target.path ] ) {
-
-					case PATH_PROPERTIES.weights:
-
-						TypedKeyframeTrack = NumberKeyframeTrack;
-						break;
-
-					case PATH_PROPERTIES.rotation:
-
-						TypedKeyframeTrack = QuaternionKeyframeTrack;
-						break;
-
-					case PATH_PROPERTIES.position:
-					case PATH_PROPERTIES.scale:
-					default:
-
-						TypedKeyframeTrack = VectorKeyframeTrack;
-						break;
+					node.updateMatrix();
 
 				}
 
-				const targetName = node.name ? node.name : node.uuid;
+				const createdTracks = parser._createAnimationTracks( node, inputAccessor, outputAccessor, sampler, target );
 
-				const interpolation = sampler.interpolation !== undefined ? INTERPOLATION[ sampler.interpolation ] : InterpolateLinear;
+				if ( createdTracks ) {
 
-				const targetNames = [];
+					for ( let k = 0; k < createdTracks.length; k ++ ) {
 
-				if ( PATH_PROPERTIES[ target.path ] === PATH_PROPERTIES.weights ) {
-
-					node.traverse( function ( object ) {
-
-						if ( object.morphTargetInfluences ) {
-
-							targetNames.push( object.name ? object.name : object.uuid );
-
-						}
-
-					} );
-
-				} else {
-
-					targetNames.push( targetName );
-
-				}
-
-				let outputArray = outputAccessor.array;
-
-				if ( outputAccessor.normalized ) {
-
-					const scale = getNormalizedComponentScale( outputArray.constructor );
-					const scaled = new Float32Array( outputArray.length );
-
-					for ( let j = 0, jl = outputArray.length; j < jl; j ++ ) {
-
-						scaled[ j ] = outputArray[ j ] * scale;
+						tracks.push( createdTracks[ k ] );
 
 					}
-
-					outputArray = scaled;
-
-				}
-
-				for ( let j = 0, jl = targetNames.length; j < jl; j ++ ) {
-
-					const track = new TypedKeyframeTrack(
-						targetNames[ j ] + '.' + PATH_PROPERTIES[ target.path ],
-						inputAccessor.array,
-						outputArray,
-						interpolation
-					);
-
-					// Override interpolation with custom factory method.
-					if ( sampler.interpolation === 'CUBICSPLINE' ) {
-
-						track.createInterpolant = function InterpolantFactoryMethodGLTFCubicSpline( result ) {
-
-							// A CUBICSPLINE keyframe in glTF has three output values for each input value,
-							// representing inTangent, splineVertex, and outTangent. As a result, track.getValueSize()
-							// must be divided by three to get the interpolant's sampleSize argument.
-
-							const interpolantType = ( this instanceof QuaternionKeyframeTrack ) ? GLTFCubicSplineQuaternionInterpolant : GLTFCubicSplineInterpolant;
-
-							return new interpolantType( this.times, this.values, this.getValueSize() / 3, result );
-
-						};
-
-						// Mark as CUBICSPLINE. `track.getInterpolation()` doesn't support custom interpolants.
-						track.createInterpolant.isInterpolantFactoryMethodGLTFCubicSpline = true;
-
-					}
-
-					tracks.push( track );
 
 				}
 
@@ -4520,6 +5839,141 @@ class GLTFParser {
 
 	}
 
+	_createAnimationTracks( node, inputAccessor, outputAccessor, sampler, target ) {
+
+		const tracks = [];
+
+		const targetName = node.name ? node.name : node.uuid;
+		const targetNames = [];
+
+		if ( PATH_PROPERTIES[ target.path ] === PATH_PROPERTIES.weights ) {
+
+			node.traverse( function ( object ) {
+
+				if ( object.morphTargetInfluences ) {
+
+					targetNames.push( object.name ? object.name : object.uuid );
+
+				}
+
+			} );
+
+		} else {
+
+			targetNames.push( targetName );
+
+		}
+
+		let TypedKeyframeTrack;
+
+		switch ( PATH_PROPERTIES[ target.path ] ) {
+
+			case PATH_PROPERTIES.weights:
+
+				TypedKeyframeTrack = NumberKeyframeTrack;
+				break;
+
+			case PATH_PROPERTIES.rotation:
+
+				TypedKeyframeTrack = QuaternionKeyframeTrack;
+				break;
+
+			case PATH_PROPERTIES.position:
+			case PATH_PROPERTIES.scale:
+
+				TypedKeyframeTrack = VectorKeyframeTrack;
+				break;
+
+			default:
+
+				switch ( outputAccessor.itemSize ) {
+
+					case 1:
+						TypedKeyframeTrack = NumberKeyframeTrack;
+						break;
+					case 2:
+					case 3:
+					default:
+						TypedKeyframeTrack = VectorKeyframeTrack;
+						break;
+
+				}
+
+				break;
+
+		}
+
+		const interpolation = sampler.interpolation !== undefined ? INTERPOLATION[ sampler.interpolation ] : InterpolateLinear;
+
+
+		const outputArray = this._getArrayFromAccessor( outputAccessor );
+
+		for ( let j = 0, jl = targetNames.length; j < jl; j ++ ) {
+
+			const track = new TypedKeyframeTrack(
+				targetNames[ j ] + '.' + PATH_PROPERTIES[ target.path ],
+				inputAccessor.array,
+				outputArray,
+				interpolation
+			);
+
+			// Override interpolation with custom factory method.
+			if ( sampler.interpolation === 'CUBICSPLINE' ) {
+
+				this._createCubicSplineTrackInterpolant( track );
+
+			}
+
+			tracks.push( track );
+
+		}
+
+		return tracks;
+
+	}
+
+	_getArrayFromAccessor( accessor ) {
+
+		let outputArray = accessor.array;
+
+		if ( accessor.normalized ) {
+
+			const scale = getNormalizedComponentScale( outputArray.constructor );
+			const scaled = new Float32Array( outputArray.length );
+
+			for ( let j = 0, jl = outputArray.length; j < jl; j ++ ) {
+
+				scaled[ j ] = outputArray[ j ] * scale;
+
+			}
+
+			outputArray = scaled;
+
+		}
+
+		return outputArray;
+
+	}
+
+	_createCubicSplineTrackInterpolant( track ) {
+
+		track.createInterpolant = function InterpolantFactoryMethodGLTFCubicSpline( result ) {
+
+			// A CUBICSPLINE keyframe in glTF has three output values for each input value,
+			// representing inTangent, splineVertex, and outTangent. As a result, track.getValueSize()
+			// must be divided by three to get the interpolant's sampleSize argument.
+
+			const interpolantType = ( this instanceof QuaternionKeyframeTrack ) ? GLTFCubicSplineQuaternionInterpolant : GLTFCubicSplineInterpolant;
+
+			return new interpolantType( this.times, this.values, this.getValueSize() / 3, result );
+
+		};
+
+		// Mark as CUBICSPLINE. `track.getInterpolation()` doesn't support custom interpolants.
+		track.createInterpolant.isInterpolantFactoryMethodGLTFCubicSpline = true;
+
+	}
+
 }
 
 /**
@@ -4683,6 +6137,12 @@ function addPrimitiveAttributes( geometry, primitiveDef, parser ) {
 
 	}
 
+	if ( ColorManagement.workingColorSpace !== LinearSRGBColorSpace && 'COLOR_0' in attributes ) {
+
+		console.warn( `THREE.GLTFLoader: Converting vertex colors from "srgb-linear" to "${ColorManagement.workingColorSpace}" not supported.` );
+
+	}
+
 	assignExtrasToUserData( geometry, primitiveDef );
 
 	computeBounds( geometry, primitiveDef, parser );
@@ -4799,13 +6259,27 @@ const APP = {
   camera: null,
   renderer : null,
   domElement : null,
+  stats : null,
 
   clock: new Clock(),// T: Clock
 
+  currentControls : null,
   orbitControls: null, // T : OrbitControls
+  flyControls : null,
+  firstPersonControls : null,
 
   narfs : 2,
 
+  // const gui = store.debuggerlilGui.get()
+  debuggerlilGui : {
+    gui : null,
+    get : function() {
+      if(!this.gui){
+        this.gui = new GUI();
+      }
+      return this.gui;
+    }
+  },
 
   // stacks & grapths
 
@@ -4846,6 +6320,37 @@ const APP = {
     planeFound : false,
     controller : null, // T : renderer.xr.getController
     reticle: null, // Mesh
+  },
+
+  postProcessing : {
+    composer : null, // = new EffectComposer( renderer );
+    useComposer : false,
+    bloomPass : null,
+    // bootUp: function(store) {
+    //   this.composer = new EffectComposer(store.renderer);
+    //   this.composer.addPass( new RenderPass( store.scene, store.camera ) );
+    //   this.useComposer = true;
+    // },
+
+    // store.postProcessing.bootUpBloom(store)
+    // const bloomPass = new UnrealBloomPass( new THREE.Vector2( window.innerWidth, window.innerHeight ), 1.5, 0.4, 0.85 );
+    bootUpBloom : function(store, {
+      resolution = new Vector2( window.innerWidth, window.innerHeight ),
+      strength = 1.5, radius = 0.4, threshold = 0.85
+      }={}) {
+        // resolution = new Vector2( window.innerWidth, window.innerHeight );
+        // resolution = new Vector2( 2,2 );
+      this.composer = new EffectComposer(store.renderer);
+      this.composer.addPass( new RenderPass( store.scene, store.camera ) );
+      this.useComposer = true;
+
+      this.bloomPass = new UnrealBloomPass(resolution, strength, radius, threshold);
+      this.composer.addPass(this.bloomPass);
+
+      this.composer.addPass( new OutputPass() );
+      this.useComposer = true;
+    },
+
   },
 
   // modes
@@ -5878,6 +7383,18 @@ function handleTouchStop(ev) {
 
 }
 
+function plane({store, color = 0xcc44ff, scale = 0.01}={}){
+  const geometry = new PlaneGeometry( 1, 1 );
+  const material = new MeshBasicMaterial( {color: color, side: DoubleSide} );
+  const plane = new Mesh( geometry, material );
+
+  plane.scale.setScalar(scale);
+  if(store){
+    store.scene.add(plane);
+  }
+  return plane;
+}
+
 function hemisphereLight(scene,{
   skyColor = 0xffffff,
   groundColor = 0xffffff,
@@ -6020,7 +7537,7 @@ class SessionLightProbe {
 
 	onXRFrame( time, xrFrame ) {
 
-		// If either this obejct or the XREstimatedLight has been destroyed, stop
+		// If either this object or the XREstimatedLight has been destroyed, stop
 		// running the frame loop.
 		if ( ! this.xrLight ) {
 
@@ -6088,7 +7605,7 @@ class XREstimatedLight extends Group {
 		this.directionalLight.intensity = 0;
 		this.add( this.directionalLight );
 
-		// Will be set to a cube map in the SessionLightProbe is environment estimation is
+		// Will be set to a cube map in the SessionLightProbe if environment estimation is
 		// available and requested.
 		this.environment = null;
 
@@ -6296,12 +7813,2273 @@ function setupXRRenderLoopHook(store) {
   };
 }
 
+// OrbitControls performs orbiting, dollying (zooming), and panning.
+// Unlike TrackballControls, it maintains the "up" direction object.up (+Y by default).
+//
+//    Orbit - left mouse / touch: one-finger move
+//    Zoom - middle mouse, or mousewheel / touch: two-finger spread or squish
+//    Pan - right mouse, or left mouse + ctrl/meta/shiftKey, or arrow keys / touch: two-finger move
+
+const _changeEvent$1 = { type: 'change' };
+const _startEvent = { type: 'start' };
+const _endEvent = { type: 'end' };
+const _ray = new Ray();
+const _plane = new Plane();
+const _TILT_LIMIT = Math.cos( 70 * MathUtils.DEG2RAD );
+
+const _v = new Vector3();
+const _twoPI = 2 * Math.PI;
+
+const _STATE = {
+	NONE: -1,
+	ROTATE: 0,
+	DOLLY: 1,
+	PAN: 2,
+	TOUCH_ROTATE: 3,
+	TOUCH_PAN: 4,
+	TOUCH_DOLLY_PAN: 5,
+	TOUCH_DOLLY_ROTATE: 6
+};
+const _EPS$1 = 0.000001;
+
+class OrbitControls extends Controls {
+
+	constructor( object, domElement = null ) {
+
+		super( object, domElement );
+
+		this.state = _STATE.NONE;
+
+		// Set to false to disable this control
+		this.enabled = true;
+
+		// "target" sets the location of focus, where the object orbits around
+		this.target = new Vector3();
+
+		// Sets the 3D cursor (similar to Blender), from which the maxTargetRadius takes effect
+		this.cursor = new Vector3();
+
+		// How far you can dolly in and out ( PerspectiveCamera only )
+		this.minDistance = 0;
+		this.maxDistance = Infinity;
+
+		// How far you can zoom in and out ( OrthographicCamera only )
+		this.minZoom = 0;
+		this.maxZoom = Infinity;
+
+		// Limit camera target within a spherical area around the cursor
+		this.minTargetRadius = 0;
+		this.maxTargetRadius = Infinity;
+
+		// How far you can orbit vertically, upper and lower limits.
+		// Range is 0 to Math.PI radians.
+		this.minPolarAngle = 0; // radians
+		this.maxPolarAngle = Math.PI; // radians
+
+		// How far you can orbit horizontally, upper and lower limits.
+		// If set, the interval [ min, max ] must be a sub-interval of [ - 2 PI, 2 PI ], with ( max - min < 2 PI )
+		this.minAzimuthAngle = - Infinity; // radians
+		this.maxAzimuthAngle = Infinity; // radians
+
+		// Set to true to enable damping (inertia)
+		// If damping is enabled, you must call controls.update() in your animation loop
+		this.enableDamping = false;
+		this.dampingFactor = 0.05;
+
+		// This option actually enables dollying in and out; left as "zoom" for backwards compatibility.
+		// Set to false to disable zooming
+		this.enableZoom = true;
+		this.zoomSpeed = 1.0;
+
+		// Set to false to disable rotating
+		this.enableRotate = true;
+		this.rotateSpeed = 1.0;
+		this.keyRotateSpeed = 1.0;
+
+		// Set to false to disable panning
+		this.enablePan = true;
+		this.panSpeed = 1.0;
+		this.screenSpacePanning = true; // if false, pan orthogonal to world-space direction camera.up
+		this.keyPanSpeed = 7.0;	// pixels moved per arrow key push
+		this.zoomToCursor = false;
+
+		// Set to true to automatically rotate around the target
+		// If auto-rotate is enabled, you must call controls.update() in your animation loop
+		this.autoRotate = false;
+		this.autoRotateSpeed = 2.0; // 30 seconds per orbit when fps is 60
+
+		// The four arrow keys
+		this.keys = { LEFT: 'ArrowLeft', UP: 'ArrowUp', RIGHT: 'ArrowRight', BOTTOM: 'ArrowDown' };
+
+		// Mouse buttons
+		this.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
+
+		// Touch fingers
+		this.touches = { ONE: TOUCH.ROTATE, TWO: TOUCH.DOLLY_PAN };
+
+		// for reset
+		this.target0 = this.target.clone();
+		this.position0 = this.object.position.clone();
+		this.zoom0 = this.object.zoom;
+
+		// the target DOM element for key events
+		this._domElementKeyEvents = null;
+
+		// internals
+
+		this._lastPosition = new Vector3();
+		this._lastQuaternion = new Quaternion();
+		this._lastTargetPosition = new Vector3();
+
+		// so camera.up is the orbit axis
+		this._quat = new Quaternion().setFromUnitVectors( object.up, new Vector3( 0, 1, 0 ) );
+		this._quatInverse = this._quat.clone().invert();
+
+		// current position in spherical coordinates
+		this._spherical = new Spherical();
+		this._sphericalDelta = new Spherical();
+
+		this._scale = 1;
+		this._panOffset = new Vector3();
+
+		this._rotateStart = new Vector2();
+		this._rotateEnd = new Vector2();
+		this._rotateDelta = new Vector2();
+
+		this._panStart = new Vector2();
+		this._panEnd = new Vector2();
+		this._panDelta = new Vector2();
+
+		this._dollyStart = new Vector2();
+		this._dollyEnd = new Vector2();
+		this._dollyDelta = new Vector2();
+
+		this._dollyDirection = new Vector3();
+		this._mouse = new Vector2();
+		this._performCursorZoom = false;
+
+		this._pointers = [];
+		this._pointerPositions = {};
+
+		this._controlActive = false;
+
+		// event listeners
+
+		this._onPointerMove = onPointerMove$2.bind( this );
+		this._onPointerDown = onPointerDown$2.bind( this );
+		this._onPointerUp = onPointerUp$2.bind( this );
+		this._onContextMenu = onContextMenu$2.bind( this );
+		this._onMouseWheel = onMouseWheel.bind( this );
+		this._onKeyDown = onKeyDown$2.bind( this );
+
+		this._onTouchStart = onTouchStart.bind( this );
+		this._onTouchMove = onTouchMove.bind( this );
+
+		this._onMouseDown = onMouseDown.bind( this );
+		this._onMouseMove = onMouseMove.bind( this );
+
+		this._interceptControlDown = interceptControlDown.bind( this );
+		this._interceptControlUp = interceptControlUp.bind( this );
+
+		//
+
+		if ( this.domElement !== null ) {
+
+			this.connect();
+
+		}
+
+		this.update();
+
+	}
+
+	connect() {
+
+		this.domElement.addEventListener( 'pointerdown', this._onPointerDown );
+		this.domElement.addEventListener( 'pointercancel', this._onPointerUp );
+
+		this.domElement.addEventListener( 'contextmenu', this._onContextMenu );
+		this.domElement.addEventListener( 'wheel', this._onMouseWheel, { passive: false } );
+
+		const document = this.domElement.getRootNode(); // offscreen canvas compatibility
+		document.addEventListener( 'keydown', this._interceptControlDown, { passive: true, capture: true } );
+
+		this.domElement.style.touchAction = 'none'; // disable touch scroll
+
+	}
+
+	disconnect() {
+
+		this.domElement.removeEventListener( 'pointerdown', this._onPointerDown );
+		this.domElement.removeEventListener( 'pointermove', this._onPointerMove );
+		this.domElement.removeEventListener( 'pointerup', this._onPointerUp );
+		this.domElement.removeEventListener( 'pointercancel', this._onPointerUp );
+
+		this.domElement.removeEventListener( 'wheel', this._onMouseWheel );
+		this.domElement.removeEventListener( 'contextmenu', this._onContextMenu );
+
+		this.stopListenToKeyEvents();
+
+		const document = this.domElement.getRootNode(); // offscreen canvas compatibility
+		document.removeEventListener( 'keydown', this._interceptControlDown, { capture: true } );
+
+		this.domElement.style.touchAction = 'auto';
+
+	}
+
+	dispose() {
+
+		this.disconnect();
+
+	}
+
+	getPolarAngle() {
+
+		return this._spherical.phi;
+
+	}
+
+	getAzimuthalAngle() {
+
+		return this._spherical.theta;
+
+	}
+
+	getDistance() {
+
+		return this.object.position.distanceTo( this.target );
+
+	}
+
+	listenToKeyEvents( domElement ) {
+
+		domElement.addEventListener( 'keydown', this._onKeyDown );
+		this._domElementKeyEvents = domElement;
+
+	}
+
+	stopListenToKeyEvents() {
+
+		if ( this._domElementKeyEvents !== null ) {
+
+			this._domElementKeyEvents.removeEventListener( 'keydown', this._onKeyDown );
+			this._domElementKeyEvents = null;
+
+		}
+
+	}
+
+	saveState() {
+
+		this.target0.copy( this.target );
+		this.position0.copy( this.object.position );
+		this.zoom0 = this.object.zoom;
+
+	}
+
+	reset() {
+
+		this.target.copy( this.target0 );
+		this.object.position.copy( this.position0 );
+		this.object.zoom = this.zoom0;
+
+		this.object.updateProjectionMatrix();
+		this.dispatchEvent( _changeEvent$1 );
+
+		this.update();
+
+		this.state = _STATE.NONE;
+
+	}
+
+	update( deltaTime = null ) {
+
+		const position = this.object.position;
+
+		_v.copy( position ).sub( this.target );
+
+		// rotate offset to "y-axis-is-up" space
+		_v.applyQuaternion( this._quat );
+
+		// angle from z-axis around y-axis
+		this._spherical.setFromVector3( _v );
+
+		if ( this.autoRotate && this.state === _STATE.NONE ) {
+
+			this._rotateLeft( this._getAutoRotationAngle( deltaTime ) );
+
+		}
+
+		if ( this.enableDamping ) {
+
+			this._spherical.theta += this._sphericalDelta.theta * this.dampingFactor;
+			this._spherical.phi += this._sphericalDelta.phi * this.dampingFactor;
+
+		} else {
+
+			this._spherical.theta += this._sphericalDelta.theta;
+			this._spherical.phi += this._sphericalDelta.phi;
+
+		}
+
+		// restrict theta to be between desired limits
+
+		let min = this.minAzimuthAngle;
+		let max = this.maxAzimuthAngle;
+
+		if ( isFinite( min ) && isFinite( max ) ) {
+
+			if ( min < - Math.PI ) min += _twoPI; else if ( min > Math.PI ) min -= _twoPI;
+
+			if ( max < - Math.PI ) max += _twoPI; else if ( max > Math.PI ) max -= _twoPI;
+
+			if ( min <= max ) {
+
+				this._spherical.theta = Math.max( min, Math.min( max, this._spherical.theta ) );
+
+			} else {
+
+				this._spherical.theta = ( this._spherical.theta > ( min + max ) / 2 ) ?
+					Math.max( min, this._spherical.theta ) :
+					Math.min( max, this._spherical.theta );
+
+			}
+
+		}
+
+		// restrict phi to be between desired limits
+		this._spherical.phi = Math.max( this.minPolarAngle, Math.min( this.maxPolarAngle, this._spherical.phi ) );
+
+		this._spherical.makeSafe();
+
+
+		// move target to panned location
+
+		if ( this.enableDamping === true ) {
+
+			this.target.addScaledVector( this._panOffset, this.dampingFactor );
+
+		} else {
+
+			this.target.add( this._panOffset );
+
+		}
+
+		// Limit the target distance from the cursor to create a sphere around the center of interest
+		this.target.sub( this.cursor );
+		this.target.clampLength( this.minTargetRadius, this.maxTargetRadius );
+		this.target.add( this.cursor );
+
+		let zoomChanged = false;
+		// adjust the camera position based on zoom only if we're not zooming to the cursor or if it's an ortho camera
+		// we adjust zoom later in these cases
+		if ( this.zoomToCursor && this._performCursorZoom || this.object.isOrthographicCamera ) {
+
+			this._spherical.radius = this._clampDistance( this._spherical.radius );
+
+		} else {
+
+			const prevRadius = this._spherical.radius;
+			this._spherical.radius = this._clampDistance( this._spherical.radius * this._scale );
+			zoomChanged = prevRadius != this._spherical.radius;
+
+		}
+
+		_v.setFromSpherical( this._spherical );
+
+		// rotate offset back to "camera-up-vector-is-up" space
+		_v.applyQuaternion( this._quatInverse );
+
+		position.copy( this.target ).add( _v );
+
+		this.object.lookAt( this.target );
+
+		if ( this.enableDamping === true ) {
+
+			this._sphericalDelta.theta *= ( 1 - this.dampingFactor );
+			this._sphericalDelta.phi *= ( 1 - this.dampingFactor );
+
+			this._panOffset.multiplyScalar( 1 - this.dampingFactor );
+
+		} else {
+
+			this._sphericalDelta.set( 0, 0, 0 );
+
+			this._panOffset.set( 0, 0, 0 );
+
+		}
+
+		// adjust camera position
+		if ( this.zoomToCursor && this._performCursorZoom ) {
+
+			let newRadius = null;
+			if ( this.object.isPerspectiveCamera ) {
+
+				// move the camera down the pointer ray
+				// this method avoids floating point error
+				const prevRadius = _v.length();
+				newRadius = this._clampDistance( prevRadius * this._scale );
+
+				const radiusDelta = prevRadius - newRadius;
+				this.object.position.addScaledVector( this._dollyDirection, radiusDelta );
+				this.object.updateMatrixWorld();
+
+				zoomChanged = !! radiusDelta;
+
+			} else if ( this.object.isOrthographicCamera ) {
+
+				// adjust the ortho camera position based on zoom changes
+				const mouseBefore = new Vector3( this._mouse.x, this._mouse.y, 0 );
+				mouseBefore.unproject( this.object );
+
+				const prevZoom = this.object.zoom;
+				this.object.zoom = Math.max( this.minZoom, Math.min( this.maxZoom, this.object.zoom / this._scale ) );
+				this.object.updateProjectionMatrix();
+
+				zoomChanged = prevZoom !== this.object.zoom;
+
+				const mouseAfter = new Vector3( this._mouse.x, this._mouse.y, 0 );
+				mouseAfter.unproject( this.object );
+
+				this.object.position.sub( mouseAfter ).add( mouseBefore );
+				this.object.updateMatrixWorld();
+
+				newRadius = _v.length();
+
+			} else {
+
+				console.warn( 'WARNING: OrbitControls.js encountered an unknown camera type - zoom to cursor disabled.' );
+				this.zoomToCursor = false;
+
+			}
+
+			// handle the placement of the target
+			if ( newRadius !== null ) {
+
+				if ( this.screenSpacePanning ) {
+
+					// position the orbit target in front of the new camera position
+					this.target.set( 0, 0, -1 )
+						.transformDirection( this.object.matrix )
+						.multiplyScalar( newRadius )
+						.add( this.object.position );
+
+				} else {
+
+					// get the ray and translation plane to compute target
+					_ray.origin.copy( this.object.position );
+					_ray.direction.set( 0, 0, -1 ).transformDirection( this.object.matrix );
+
+					// if the camera is 20 degrees above the horizon then don't adjust the focus target to avoid
+					// extremely large values
+					if ( Math.abs( this.object.up.dot( _ray.direction ) ) < _TILT_LIMIT ) {
+
+						this.object.lookAt( this.target );
+
+					} else {
+
+						_plane.setFromNormalAndCoplanarPoint( this.object.up, this.target );
+						_ray.intersectPlane( _plane, this.target );
+
+					}
+
+				}
+
+			}
+
+		} else if ( this.object.isOrthographicCamera ) {
+
+			const prevZoom = this.object.zoom;
+			this.object.zoom = Math.max( this.minZoom, Math.min( this.maxZoom, this.object.zoom / this._scale ) );
+
+			if ( prevZoom !== this.object.zoom ) {
+
+				this.object.updateProjectionMatrix();
+				zoomChanged = true;
+
+			}
+
+		}
+
+		this._scale = 1;
+		this._performCursorZoom = false;
+
+		// update condition is:
+		// min(camera displacement, camera rotation in radians)^2 > EPS
+		// using small-angle approximation cos(x/2) = 1 - x^2 / 8
+
+		if ( zoomChanged ||
+			this._lastPosition.distanceToSquared( this.object.position ) > _EPS$1 ||
+			8 * ( 1 - this._lastQuaternion.dot( this.object.quaternion ) ) > _EPS$1 ||
+			this._lastTargetPosition.distanceToSquared( this.target ) > _EPS$1 ) {
+
+			this.dispatchEvent( _changeEvent$1 );
+
+			this._lastPosition.copy( this.object.position );
+			this._lastQuaternion.copy( this.object.quaternion );
+			this._lastTargetPosition.copy( this.target );
+
+			return true;
+
+		}
+
+		return false;
+
+	}
+
+	_getAutoRotationAngle( deltaTime ) {
+
+		if ( deltaTime !== null ) {
+
+			return ( _twoPI / 60 * this.autoRotateSpeed ) * deltaTime;
+
+		} else {
+
+			return _twoPI / 60 / 60 * this.autoRotateSpeed;
+
+		}
+
+	}
+
+	_getZoomScale( delta ) {
+
+		const normalizedDelta = Math.abs( delta * 0.01 );
+		return Math.pow( 0.95, this.zoomSpeed * normalizedDelta );
+
+	}
+
+	_rotateLeft( angle ) {
+
+		this._sphericalDelta.theta -= angle;
+
+	}
+
+	_rotateUp( angle ) {
+
+		this._sphericalDelta.phi -= angle;
+
+	}
+
+	_panLeft( distance, objectMatrix ) {
+
+		_v.setFromMatrixColumn( objectMatrix, 0 ); // get X column of objectMatrix
+		_v.multiplyScalar( - distance );
+
+		this._panOffset.add( _v );
+
+	}
+
+	_panUp( distance, objectMatrix ) {
+
+		if ( this.screenSpacePanning === true ) {
+
+			_v.setFromMatrixColumn( objectMatrix, 1 );
+
+		} else {
+
+			_v.setFromMatrixColumn( objectMatrix, 0 );
+			_v.crossVectors( this.object.up, _v );
+
+		}
+
+		_v.multiplyScalar( distance );
+
+		this._panOffset.add( _v );
+
+	}
+
+	// deltaX and deltaY are in pixels; right and down are positive
+	_pan( deltaX, deltaY ) {
+
+		const element = this.domElement;
+
+		if ( this.object.isPerspectiveCamera ) {
+
+			// perspective
+			const position = this.object.position;
+			_v.copy( position ).sub( this.target );
+			let targetDistance = _v.length();
+
+			// half of the fov is center to top of screen
+			targetDistance *= Math.tan( ( this.object.fov / 2 ) * Math.PI / 180.0 );
+
+			// we use only clientHeight here so aspect ratio does not distort speed
+			this._panLeft( 2 * deltaX * targetDistance / element.clientHeight, this.object.matrix );
+			this._panUp( 2 * deltaY * targetDistance / element.clientHeight, this.object.matrix );
+
+		} else if ( this.object.isOrthographicCamera ) {
+
+			// orthographic
+			this._panLeft( deltaX * ( this.object.right - this.object.left ) / this.object.zoom / element.clientWidth, this.object.matrix );
+			this._panUp( deltaY * ( this.object.top - this.object.bottom ) / this.object.zoom / element.clientHeight, this.object.matrix );
+
+		} else {
+
+			// camera neither orthographic nor perspective
+			console.warn( 'WARNING: OrbitControls.js encountered an unknown camera type - pan disabled.' );
+			this.enablePan = false;
+
+		}
+
+	}
+
+	_dollyOut( dollyScale ) {
+
+		if ( this.object.isPerspectiveCamera || this.object.isOrthographicCamera ) {
+
+			this._scale /= dollyScale;
+
+		} else {
+
+			console.warn( 'WARNING: OrbitControls.js encountered an unknown camera type - dolly/zoom disabled.' );
+			this.enableZoom = false;
+
+		}
+
+	}
+
+	_dollyIn( dollyScale ) {
+
+		if ( this.object.isPerspectiveCamera || this.object.isOrthographicCamera ) {
+
+			this._scale *= dollyScale;
+
+		} else {
+
+			console.warn( 'WARNING: OrbitControls.js encountered an unknown camera type - dolly/zoom disabled.' );
+			this.enableZoom = false;
+
+		}
+
+	}
+
+	_updateZoomParameters( x, y ) {
+
+		if ( ! this.zoomToCursor ) {
+
+			return;
+
+		}
+
+		this._performCursorZoom = true;
+
+		const rect = this.domElement.getBoundingClientRect();
+		const dx = x - rect.left;
+		const dy = y - rect.top;
+		const w = rect.width;
+		const h = rect.height;
+
+		this._mouse.x = ( dx / w ) * 2 - 1;
+		this._mouse.y = - ( dy / h ) * 2 + 1;
+
+		this._dollyDirection.set( this._mouse.x, this._mouse.y, 1 ).unproject( this.object ).sub( this.object.position ).normalize();
+
+	}
+
+	_clampDistance( dist ) {
+
+		return Math.max( this.minDistance, Math.min( this.maxDistance, dist ) );
+
+	}
+
+	//
+	// event callbacks - update the object state
+	//
+
+	_handleMouseDownRotate( event ) {
+
+		this._rotateStart.set( event.clientX, event.clientY );
+
+	}
+
+	_handleMouseDownDolly( event ) {
+
+		this._updateZoomParameters( event.clientX, event.clientX );
+		this._dollyStart.set( event.clientX, event.clientY );
+
+	}
+
+	_handleMouseDownPan( event ) {
+
+		this._panStart.set( event.clientX, event.clientY );
+
+	}
+
+	_handleMouseMoveRotate( event ) {
+
+		this._rotateEnd.set( event.clientX, event.clientY );
+
+		this._rotateDelta.subVectors( this._rotateEnd, this._rotateStart ).multiplyScalar( this.rotateSpeed );
+
+		const element = this.domElement;
+
+		this._rotateLeft( _twoPI * this._rotateDelta.x / element.clientHeight ); // yes, height
+
+		this._rotateUp( _twoPI * this._rotateDelta.y / element.clientHeight );
+
+		this._rotateStart.copy( this._rotateEnd );
+
+		this.update();
+
+	}
+
+	_handleMouseMoveDolly( event ) {
+
+		this._dollyEnd.set( event.clientX, event.clientY );
+
+		this._dollyDelta.subVectors( this._dollyEnd, this._dollyStart );
+
+		if ( this._dollyDelta.y > 0 ) {
+
+			this._dollyOut( this._getZoomScale( this._dollyDelta.y ) );
+
+		} else if ( this._dollyDelta.y < 0 ) {
+
+			this._dollyIn( this._getZoomScale( this._dollyDelta.y ) );
+
+		}
+
+		this._dollyStart.copy( this._dollyEnd );
+
+		this.update();
+
+	}
+
+	_handleMouseMovePan( event ) {
+
+		this._panEnd.set( event.clientX, event.clientY );
+
+		this._panDelta.subVectors( this._panEnd, this._panStart ).multiplyScalar( this.panSpeed );
+
+		this._pan( this._panDelta.x, this._panDelta.y );
+
+		this._panStart.copy( this._panEnd );
+
+		this.update();
+
+	}
+
+	_handleMouseWheel( event ) {
+
+		this._updateZoomParameters( event.clientX, event.clientY );
+
+		if ( event.deltaY < 0 ) {
+
+			this._dollyIn( this._getZoomScale( event.deltaY ) );
+
+		} else if ( event.deltaY > 0 ) {
+
+			this._dollyOut( this._getZoomScale( event.deltaY ) );
+
+		}
+
+		this.update();
+
+	}
+
+	_handleKeyDown( event ) {
+
+		let needsUpdate = false;
+
+		switch ( event.code ) {
+
+			case this.keys.UP:
+
+				if ( event.ctrlKey || event.metaKey || event.shiftKey ) {
+
+					if ( this.enableRotate ) {
+
+						this._rotateUp( _twoPI * this.keyRotateSpeed / this.domElement.clientHeight );
+
+					}
+
+				} else {
+
+					if ( this.enablePan ) {
+
+						this._pan( 0, this.keyPanSpeed );
+
+					}
+
+				}
+
+				needsUpdate = true;
+				break;
+
+			case this.keys.BOTTOM:
+
+				if ( event.ctrlKey || event.metaKey || event.shiftKey ) {
+
+					if ( this.enableRotate ) {
+
+						this._rotateUp( - _twoPI * this.keyRotateSpeed / this.domElement.clientHeight );
+
+					}
+
+				} else {
+
+					if ( this.enablePan ) {
+
+						this._pan( 0, - this.keyPanSpeed );
+
+					}
+
+				}
+
+				needsUpdate = true;
+				break;
+
+			case this.keys.LEFT:
+
+				if ( event.ctrlKey || event.metaKey || event.shiftKey ) {
+
+					if ( this.enableRotate ) {
+
+						this._rotateLeft( _twoPI * this.keyRotateSpeed / this.domElement.clientHeight );
+
+					}
+
+				} else {
+
+					if ( this.enablePan ) {
+
+						this._pan( this.keyPanSpeed, 0 );
+
+					}
+
+				}
+
+				needsUpdate = true;
+				break;
+
+			case this.keys.RIGHT:
+
+				if ( event.ctrlKey || event.metaKey || event.shiftKey ) {
+
+					if ( this.enableRotate ) {
+
+						this._rotateLeft( - _twoPI * this.keyRotateSpeed / this.domElement.clientHeight );
+
+					}
+
+				} else {
+
+					if ( this.enablePan ) {
+
+						this._pan( - this.keyPanSpeed, 0 );
+
+					}
+
+				}
+
+				needsUpdate = true;
+				break;
+
+		}
+
+		if ( needsUpdate ) {
+
+			// prevent the browser from scrolling on cursor keys
+			event.preventDefault();
+
+			this.update();
+
+		}
+
+
+	}
+
+	_handleTouchStartRotate( event ) {
+
+		if ( this._pointers.length === 1 ) {
+
+			this._rotateStart.set( event.pageX, event.pageY );
+
+		} else {
+
+			const position = this._getSecondPointerPosition( event );
+
+			const x = 0.5 * ( event.pageX + position.x );
+			const y = 0.5 * ( event.pageY + position.y );
+
+			this._rotateStart.set( x, y );
+
+		}
+
+	}
+
+	_handleTouchStartPan( event ) {
+
+		if ( this._pointers.length === 1 ) {
+
+			this._panStart.set( event.pageX, event.pageY );
+
+		} else {
+
+			const position = this._getSecondPointerPosition( event );
+
+			const x = 0.5 * ( event.pageX + position.x );
+			const y = 0.5 * ( event.pageY + position.y );
+
+			this._panStart.set( x, y );
+
+		}
+
+	}
+
+	_handleTouchStartDolly( event ) {
+
+		const position = this._getSecondPointerPosition( event );
+
+		const dx = event.pageX - position.x;
+		const dy = event.pageY - position.y;
+
+		const distance = Math.sqrt( dx * dx + dy * dy );
+
+		this._dollyStart.set( 0, distance );
+
+	}
+
+	_handleTouchStartDollyPan( event ) {
+
+		if ( this.enableZoom ) this._handleTouchStartDolly( event );
+
+		if ( this.enablePan ) this._handleTouchStartPan( event );
+
+	}
+
+	_handleTouchStartDollyRotate( event ) {
+
+		if ( this.enableZoom ) this._handleTouchStartDolly( event );
+
+		if ( this.enableRotate ) this._handleTouchStartRotate( event );
+
+	}
+
+	_handleTouchMoveRotate( event ) {
+
+		if ( this._pointers.length == 1 ) {
+
+			this._rotateEnd.set( event.pageX, event.pageY );
+
+		} else {
+
+			const position = this._getSecondPointerPosition( event );
+
+			const x = 0.5 * ( event.pageX + position.x );
+			const y = 0.5 * ( event.pageY + position.y );
+
+			this._rotateEnd.set( x, y );
+
+		}
+
+		this._rotateDelta.subVectors( this._rotateEnd, this._rotateStart ).multiplyScalar( this.rotateSpeed );
+
+		const element = this.domElement;
+
+		this._rotateLeft( _twoPI * this._rotateDelta.x / element.clientHeight ); // yes, height
+
+		this._rotateUp( _twoPI * this._rotateDelta.y / element.clientHeight );
+
+		this._rotateStart.copy( this._rotateEnd );
+
+	}
+
+	_handleTouchMovePan( event ) {
+
+		if ( this._pointers.length === 1 ) {
+
+			this._panEnd.set( event.pageX, event.pageY );
+
+		} else {
+
+			const position = this._getSecondPointerPosition( event );
+
+			const x = 0.5 * ( event.pageX + position.x );
+			const y = 0.5 * ( event.pageY + position.y );
+
+			this._panEnd.set( x, y );
+
+		}
+
+		this._panDelta.subVectors( this._panEnd, this._panStart ).multiplyScalar( this.panSpeed );
+
+		this._pan( this._panDelta.x, this._panDelta.y );
+
+		this._panStart.copy( this._panEnd );
+
+	}
+
+	_handleTouchMoveDolly( event ) {
+
+		const position = this._getSecondPointerPosition( event );
+
+		const dx = event.pageX - position.x;
+		const dy = event.pageY - position.y;
+
+		const distance = Math.sqrt( dx * dx + dy * dy );
+
+		this._dollyEnd.set( 0, distance );
+
+		this._dollyDelta.set( 0, Math.pow( this._dollyEnd.y / this._dollyStart.y, this.zoomSpeed ) );
+
+		this._dollyOut( this._dollyDelta.y );
+
+		this._dollyStart.copy( this._dollyEnd );
+
+		const centerX = ( event.pageX + position.x ) * 0.5;
+		const centerY = ( event.pageY + position.y ) * 0.5;
+
+		this._updateZoomParameters( centerX, centerY );
+
+	}
+
+	_handleTouchMoveDollyPan( event ) {
+
+		if ( this.enableZoom ) this._handleTouchMoveDolly( event );
+
+		if ( this.enablePan ) this._handleTouchMovePan( event );
+
+	}
+
+	_handleTouchMoveDollyRotate( event ) {
+
+		if ( this.enableZoom ) this._handleTouchMoveDolly( event );
+
+		if ( this.enableRotate ) this._handleTouchMoveRotate( event );
+
+	}
+
+	// pointers
+
+	_addPointer( event ) {
+
+		this._pointers.push( event.pointerId );
+
+	}
+
+	_removePointer( event ) {
+
+		delete this._pointerPositions[ event.pointerId ];
+
+		for ( let i = 0; i < this._pointers.length; i ++ ) {
+
+			if ( this._pointers[ i ] == event.pointerId ) {
+
+				this._pointers.splice( i, 1 );
+				return;
+
+			}
+
+		}
+
+	}
+
+	_isTrackingPointer( event ) {
+
+		for ( let i = 0; i < this._pointers.length; i ++ ) {
+
+			if ( this._pointers[ i ] == event.pointerId ) return true;
+
+		}
+
+		return false;
+
+	}
+
+	_trackPointer( event ) {
+
+		let position = this._pointerPositions[ event.pointerId ];
+
+		if ( position === undefined ) {
+
+			position = new Vector2();
+			this._pointerPositions[ event.pointerId ] = position;
+
+		}
+
+		position.set( event.pageX, event.pageY );
+
+	}
+
+	_getSecondPointerPosition( event ) {
+
+		const pointerId = ( event.pointerId === this._pointers[ 0 ] ) ? this._pointers[ 1 ] : this._pointers[ 0 ];
+
+		return this._pointerPositions[ pointerId ];
+
+	}
+
+	//
+
+	_customWheelEvent( event ) {
+
+		const mode = event.deltaMode;
+
+		// minimal wheel event altered to meet delta-zoom demand
+		const newEvent = {
+			clientX: event.clientX,
+			clientY: event.clientY,
+			deltaY: event.deltaY,
+		};
+
+		switch ( mode ) {
+
+			case 1: // LINE_MODE
+				newEvent.deltaY *= 16;
+				break;
+
+			case 2: // PAGE_MODE
+				newEvent.deltaY *= 100;
+				break;
+
+		}
+
+		// detect if event was triggered by pinching
+		if ( event.ctrlKey && ! this._controlActive ) {
+
+			newEvent.deltaY *= 10;
+
+		}
+
+		return newEvent;
+
+	}
+
+}
+
+function onPointerDown$2( event ) {
+
+	if ( this.enabled === false ) return;
+
+	if ( this._pointers.length === 0 ) {
+
+		this.domElement.setPointerCapture( event.pointerId );
+
+		this.domElement.addEventListener( 'pointermove', this._onPointerMove );
+		this.domElement.addEventListener( 'pointerup', this._onPointerUp );
+
+	}
+
+	//
+
+	if ( this._isTrackingPointer( event ) ) return;
+
+	//
+
+	this._addPointer( event );
+
+	if ( event.pointerType === 'touch' ) {
+
+		this._onTouchStart( event );
+
+	} else {
+
+		this._onMouseDown( event );
+
+	}
+
+}
+
+function onPointerMove$2( event ) {
+
+	if ( this.enabled === false ) return;
+
+	if ( event.pointerType === 'touch' ) {
+
+		this._onTouchMove( event );
+
+	} else {
+
+		this._onMouseMove( event );
+
+	}
+
+}
+
+function onPointerUp$2( event ) {
+
+	this._removePointer( event );
+
+	switch ( this._pointers.length ) {
+
+		case 0:
+
+			this.domElement.releasePointerCapture( event.pointerId );
+
+			this.domElement.removeEventListener( 'pointermove', this._onPointerMove );
+			this.domElement.removeEventListener( 'pointerup', this._onPointerUp );
+
+			this.dispatchEvent( _endEvent );
+
+			this.state = _STATE.NONE;
+
+			break;
+
+		case 1:
+
+			const pointerId = this._pointers[ 0 ];
+			const position = this._pointerPositions[ pointerId ];
+
+			// minimal placeholder event - allows state correction on pointer-up
+			this._onTouchStart( { pointerId: pointerId, pageX: position.x, pageY: position.y } );
+
+			break;
+
+	}
+
+}
+
+function onMouseDown( event ) {
+
+	let mouseAction;
+
+	switch ( event.button ) {
+
+		case 0:
+
+			mouseAction = this.mouseButtons.LEFT;
+			break;
+
+		case 1:
+
+			mouseAction = this.mouseButtons.MIDDLE;
+			break;
+
+		case 2:
+
+			mouseAction = this.mouseButtons.RIGHT;
+			break;
+
+		default:
+
+			mouseAction = -1;
+
+	}
+
+	switch ( mouseAction ) {
+
+		case MOUSE.DOLLY:
+
+			if ( this.enableZoom === false ) return;
+
+			this._handleMouseDownDolly( event );
+
+			this.state = _STATE.DOLLY;
+
+			break;
+
+		case MOUSE.ROTATE:
+
+			if ( event.ctrlKey || event.metaKey || event.shiftKey ) {
+
+				if ( this.enablePan === false ) return;
+
+				this._handleMouseDownPan( event );
+
+				this.state = _STATE.PAN;
+
+			} else {
+
+				if ( this.enableRotate === false ) return;
+
+				this._handleMouseDownRotate( event );
+
+				this.state = _STATE.ROTATE;
+
+			}
+
+			break;
+
+		case MOUSE.PAN:
+
+			if ( event.ctrlKey || event.metaKey || event.shiftKey ) {
+
+				if ( this.enableRotate === false ) return;
+
+				this._handleMouseDownRotate( event );
+
+				this.state = _STATE.ROTATE;
+
+			} else {
+
+				if ( this.enablePan === false ) return;
+
+				this._handleMouseDownPan( event );
+
+				this.state = _STATE.PAN;
+
+			}
+
+			break;
+
+		default:
+
+			this.state = _STATE.NONE;
+
+	}
+
+	if ( this.state !== _STATE.NONE ) {
+
+		this.dispatchEvent( _startEvent );
+
+	}
+
+}
+
+function onMouseMove( event ) {
+
+	switch ( this.state ) {
+
+		case _STATE.ROTATE:
+
+			if ( this.enableRotate === false ) return;
+
+			this._handleMouseMoveRotate( event );
+
+			break;
+
+		case _STATE.DOLLY:
+
+			if ( this.enableZoom === false ) return;
+
+			this._handleMouseMoveDolly( event );
+
+			break;
+
+		case _STATE.PAN:
+
+			if ( this.enablePan === false ) return;
+
+			this._handleMouseMovePan( event );
+
+			break;
+
+	}
+
+}
+
+function onMouseWheel( event ) {
+
+	if ( this.enabled === false || this.enableZoom === false || this.state !== _STATE.NONE ) return;
+
+	event.preventDefault();
+
+	this.dispatchEvent( _startEvent );
+
+	this._handleMouseWheel( this._customWheelEvent( event ) );
+
+	this.dispatchEvent( _endEvent );
+
+}
+
+function onKeyDown$2( event ) {
+
+	if ( this.enabled === false ) return;
+
+	this._handleKeyDown( event );
+
+}
+
+function onTouchStart( event ) {
+
+	this._trackPointer( event );
+
+	switch ( this._pointers.length ) {
+
+		case 1:
+
+			switch ( this.touches.ONE ) {
+
+				case TOUCH.ROTATE:
+
+					if ( this.enableRotate === false ) return;
+
+					this._handleTouchStartRotate( event );
+
+					this.state = _STATE.TOUCH_ROTATE;
+
+					break;
+
+				case TOUCH.PAN:
+
+					if ( this.enablePan === false ) return;
+
+					this._handleTouchStartPan( event );
+
+					this.state = _STATE.TOUCH_PAN;
+
+					break;
+
+				default:
+
+					this.state = _STATE.NONE;
+
+			}
+
+			break;
+
+		case 2:
+
+			switch ( this.touches.TWO ) {
+
+				case TOUCH.DOLLY_PAN:
+
+					if ( this.enableZoom === false && this.enablePan === false ) return;
+
+					this._handleTouchStartDollyPan( event );
+
+					this.state = _STATE.TOUCH_DOLLY_PAN;
+
+					break;
+
+				case TOUCH.DOLLY_ROTATE:
+
+					if ( this.enableZoom === false && this.enableRotate === false ) return;
+
+					this._handleTouchStartDollyRotate( event );
+
+					this.state = _STATE.TOUCH_DOLLY_ROTATE;
+
+					break;
+
+				default:
+
+					this.state = _STATE.NONE;
+
+			}
+
+			break;
+
+		default:
+
+			this.state = _STATE.NONE;
+
+	}
+
+	if ( this.state !== _STATE.NONE ) {
+
+		this.dispatchEvent( _startEvent );
+
+	}
+
+}
+
+function onTouchMove( event ) {
+
+	this._trackPointer( event );
+
+	switch ( this.state ) {
+
+		case _STATE.TOUCH_ROTATE:
+
+			if ( this.enableRotate === false ) return;
+
+			this._handleTouchMoveRotate( event );
+
+			this.update();
+
+			break;
+
+		case _STATE.TOUCH_PAN:
+
+			if ( this.enablePan === false ) return;
+
+			this._handleTouchMovePan( event );
+
+			this.update();
+
+			break;
+
+		case _STATE.TOUCH_DOLLY_PAN:
+
+			if ( this.enableZoom === false && this.enablePan === false ) return;
+
+			this._handleTouchMoveDollyPan( event );
+
+			this.update();
+
+			break;
+
+		case _STATE.TOUCH_DOLLY_ROTATE:
+
+			if ( this.enableZoom === false && this.enableRotate === false ) return;
+
+			this._handleTouchMoveDollyRotate( event );
+
+			this.update();
+
+			break;
+
+		default:
+
+			this.state = _STATE.NONE;
+
+	}
+
+}
+
+function onContextMenu$2( event ) {
+
+	if ( this.enabled === false ) return;
+
+	event.preventDefault();
+
+}
+
+function interceptControlDown( event ) {
+
+	if ( event.key === 'Control' ) {
+
+		this._controlActive = true;
+
+		const document = this.domElement.getRootNode(); // offscreen canvas compatibility
+
+		document.addEventListener( 'keyup', this._interceptControlUp, { passive: true, capture: true } );
+
+	}
+
+}
+
+function interceptControlUp( event ) {
+
+	if ( event.key === 'Control' ) {
+
+		this._controlActive = false;
+
+		const document = this.domElement.getRootNode(); // offscreen canvas compatibility
+
+		document.removeEventListener( 'keyup', this._interceptControlUp, { passive: true, capture: true } );
+
+	}
+
+}
+
+function setupOrbitController(store) {
+
+  // if ( ! store.xr.IS_XR_AVAIL ) {
+    // if ( false ) {
+    // we remove the priour renderer.domElement for webxrs overlay requirement
+    // const mm = document.getElementById("rootlike");
+    const orbitControls = new OrbitControls( store.camera, store.domElement );
+    // window.aa = orbitControls;
+    // orbitControls.addEventListener( 'change', render ); // use if there is no animation loop
+    orbitControls.minDistance = 0.2;
+    orbitControls.maxDistance = 100;
+    // orbitControls.target.set( 0, 0, - 0.2 );
+    orbitControls.enableDamping = true;
+    orbitControls.dampingFactor = 0.05;
+    // orbitControls.rotateSpeed = 5;
+    // orbitControls.update();
+    orbitControls.enableDamping = true;
+    store.orbitControls = orbitControls;
+    store.currentControls = orbitControls;
+  // }
+
+}
+
+const _lookDirection = new Vector3();
+const _spherical = new Spherical();
+const _target = new Vector3();
+const _targetPosition = new Vector3();
+
+class FirstPersonControls extends Controls {
+
+	constructor( object, domElement = null ) {
+
+		super( object, domElement );
+
+		// API
+
+		this.movementSpeed = 1.0;
+		this.lookSpeed = 0.005;
+
+		this.lookVertical = true;
+		this.autoForward = false;
+
+		this.activeLook = true;
+
+		this.heightSpeed = false;
+		this.heightCoef = 1.0;
+		this.heightMin = 0.0;
+		this.heightMax = 1.0;
+
+		this.constrainVertical = false;
+		this.verticalMin = 0;
+		this.verticalMax = Math.PI;
+
+		this.mouseDragOn = false;
+
+		// internals
+
+		this._autoSpeedFactor = 0.0;
+
+		this._pointerX = 0;
+		this._pointerY = 0;
+
+		this._moveForward = false;
+		this._moveBackward = false;
+		this._moveLeft = false;
+		this._moveRight = false;
+
+		this._viewHalfX = 0;
+		this._viewHalfY = 0;
+
+		this._lat = 0;
+		this._lon = 0;
+
+		// event listeners
+
+		this._onPointerMove = onPointerMove$1.bind( this );
+		this._onPointerDown = onPointerDown$1.bind( this );
+		this._onPointerUp = onPointerUp$1.bind( this );
+		this._onContextMenu = onContextMenu$1.bind( this );
+		this._onKeyDown = onKeyDown$1.bind( this );
+		this._onKeyUp = onKeyUp$1.bind( this );
+
+		//
+
+		if ( domElement !== null ) {
+
+			this.connect();
+
+			this.handleResize();
+
+		}
+
+		this._setOrientation();
+
+	}
+
+	connect() {
+
+		window.addEventListener( 'keydown', this._onKeyDown );
+		window.addEventListener( 'keyup', this._onKeyUp );
+
+		this.domElement.addEventListener( 'pointermove', this._onPointerMove );
+		this.domElement.addEventListener( 'pointerdown', this._onPointerDown );
+		this.domElement.addEventListener( 'pointerup', this._onPointerUp );
+		this.domElement.addEventListener( 'contextmenu', this._onContextMenu );
+
+	}
+
+	disconnect() {
+
+		window.removeEventListener( 'keydown', this._onKeyDown );
+		window.removeEventListener( 'keyup', this._onKeyUp );
+
+		this.domElement.removeEventListener( 'pointerdown', this._onPointerMove );
+		this.domElement.removeEventListener( 'pointermove', this._onPointerDown );
+		this.domElement.removeEventListener( 'pointerup', this._onPointerUp );
+		this.domElement.removeEventListener( 'contextmenu', this._onContextMenu );
+
+	}
+
+	dispose() {
+
+		this.disconnect();
+
+	}
+
+	handleResize() {
+
+		if ( this.domElement === document ) {
+
+			this._viewHalfX = window.innerWidth / 2;
+			this._viewHalfY = window.innerHeight / 2;
+
+		} else {
+
+			this._viewHalfX = this.domElement.offsetWidth / 2;
+			this._viewHalfY = this.domElement.offsetHeight / 2;
+
+		}
+
+	}
+
+	lookAt( x, y, z ) {
+
+		if ( x.isVector3 ) {
+
+			_target.copy( x );
+
+		} else {
+
+			_target.set( x, y, z );
+
+		}
+
+		this.object.lookAt( _target );
+
+		this._setOrientation();
+
+		return this;
+
+	}
+
+	update( delta ) {
+
+		if ( this.enabled === false ) return;
+
+		if ( this.heightSpeed ) {
+
+			const y = MathUtils.clamp( this.object.position.y, this.heightMin, this.heightMax );
+			const heightDelta = y - this.heightMin;
+
+			this._autoSpeedFactor = delta * ( heightDelta * this.heightCoef );
+
+		} else {
+
+			this._autoSpeedFactor = 0.0;
+
+		}
+
+		const actualMoveSpeed = delta * this.movementSpeed;
+
+		if ( this._moveForward || ( this.autoForward && ! this._moveBackward ) ) this.object.translateZ( - ( actualMoveSpeed + this._autoSpeedFactor ) );
+		if ( this._moveBackward ) this.object.translateZ( actualMoveSpeed );
+
+		if ( this._moveLeft ) this.object.translateX( - actualMoveSpeed );
+		if ( this._moveRight ) this.object.translateX( actualMoveSpeed );
+
+		if ( this._moveUp ) this.object.translateY( actualMoveSpeed );
+		if ( this._moveDown ) this.object.translateY( - actualMoveSpeed );
+
+		let actualLookSpeed = delta * this.lookSpeed;
+
+		if ( ! this.activeLook ) {
+
+			actualLookSpeed = 0;
+
+		}
+
+		let verticalLookRatio = 1;
+
+		if ( this.constrainVertical ) {
+
+			verticalLookRatio = Math.PI / ( this.verticalMax - this.verticalMin );
+
+		}
+
+		this._lon -= this._pointerX * actualLookSpeed;
+		if ( this.lookVertical ) this._lat -= this._pointerY * actualLookSpeed * verticalLookRatio;
+
+		this._lat = Math.max( -85, Math.min( 85, this._lat ) );
+
+		let phi = MathUtils.degToRad( 90 - this._lat );
+		const theta = MathUtils.degToRad( this._lon );
+
+		if ( this.constrainVertical ) {
+
+			phi = MathUtils.mapLinear( phi, 0, Math.PI, this.verticalMin, this.verticalMax );
+
+		}
+
+		const position = this.object.position;
+
+		_targetPosition.setFromSphericalCoords( 1, phi, theta ).add( position );
+
+		this.object.lookAt( _targetPosition );
+
+	}
+
+	_setOrientation() {
+
+		const quaternion = this.object.quaternion;
+
+		_lookDirection.set( 0, 0, -1 ).applyQuaternion( quaternion );
+		_spherical.setFromVector3( _lookDirection );
+
+		this._lat = 90 - MathUtils.radToDeg( _spherical.phi );
+		this._lon = MathUtils.radToDeg( _spherical.theta );
+
+	}
+
+}
+
+function onPointerDown$1( event ) {
+
+	if ( this.domElement !== document ) {
+
+		this.domElement.focus();
+
+	}
+
+	if ( this.activeLook ) {
+
+		switch ( event.button ) {
+
+			case 0: this._moveForward = true; break;
+			case 2: this._moveBackward = true; break;
+
+		}
+
+	}
+
+	this.mouseDragOn = true;
+
+}
+
+function onPointerUp$1( event ) {
+
+	if ( this.activeLook ) {
+
+		switch ( event.button ) {
+
+			case 0: this._moveForward = false; break;
+			case 2: this._moveBackward = false; break;
+
+		}
+
+	}
+
+	this.mouseDragOn = false;
+
+}
+
+function onPointerMove$1( event ) {
+
+	if ( this.domElement === document ) {
+
+		this._pointerX = event.pageX - this._viewHalfX;
+		this._pointerY = event.pageY - this._viewHalfY;
+
+	} else {
+
+		this._pointerX = event.pageX - this.domElement.offsetLeft - this._viewHalfX;
+		this._pointerY = event.pageY - this.domElement.offsetTop - this._viewHalfY;
+
+	}
+
+}
+
+function onKeyDown$1( event ) {
+
+	switch ( event.code ) {
+
+		case 'ArrowUp':
+		case 'KeyW': this._moveForward = true; break;
+
+		case 'ArrowLeft':
+		case 'KeyA': this._moveLeft = true; break;
+
+		case 'ArrowDown':
+		case 'KeyS': this._moveBackward = true; break;
+
+		case 'ArrowRight':
+		case 'KeyD': this._moveRight = true; break;
+
+		case 'KeyR': this._moveUp = true; break;
+		case 'KeyF': this._moveDown = true; break;
+
+	}
+
+}
+
+function onKeyUp$1( event ) {
+
+	switch ( event.code ) {
+
+		case 'ArrowUp':
+		case 'KeyW': this._moveForward = false; break;
+
+		case 'ArrowLeft':
+		case 'KeyA': this._moveLeft = false; break;
+
+		case 'ArrowDown':
+		case 'KeyS': this._moveBackward = false; break;
+
+		case 'ArrowRight':
+		case 'KeyD': this._moveRight = false; break;
+
+		case 'KeyR': this._moveUp = false; break;
+		case 'KeyF': this._moveDown = false; break;
+
+	}
+
+}
+
+function onContextMenu$1( event ) {
+
+	if ( this.enabled === false ) return;
+
+	event.preventDefault();
+
+}
+
+function setupFirstPersonControls(store,{
+  movementSpeed=150, lookSpeed=0.1,
+  dragToLook=false
+  }={}) {
+
+  const controls = new FirstPersonControls( store.camera, store.domElement );
+  controls.movementSpeed = movementSpeed;
+  // console.log("lookSpeed", lookSpeed);
+  controls.lookSpeed = lookSpeed;
+  controls.autoForward  = false;
+  // console.log("??>>skdfbskdfb");
+
+  store.firstPersonControls = controls;
+  store.currentControls = controls;
+
+  return store.firstPersonControls;
+
+}
+
+const _changeEvent = { type: 'change' };
+
+const _EPS = 0.000001;
+const _tmpQuaternion = new Quaternion();
+
+class FlyControls extends Controls {
+
+	constructor( object, domElement = null ) {
+
+		super( object, domElement );
+
+		this.movementSpeed = 1.0;
+		this.rollSpeed = 0.005;
+
+		this.dragToLook = false;
+		this.autoForward = false;
+
+		// internals
+
+		this._moveState = { up: 0, down: 0, left: 0, right: 0, forward: 0, back: 0, pitchUp: 0, pitchDown: 0, yawLeft: 0, yawRight: 0, rollLeft: 0, rollRight: 0 };
+		this._moveVector = new Vector3( 0, 0, 0 );
+		this._rotationVector = new Vector3( 0, 0, 0 );
+		this._lastQuaternion = new Quaternion();
+		this._lastPosition = new Vector3();
+		this._status = 0;
+
+		// event listeners
+
+		this._onKeyDown = onKeyDown.bind( this );
+		this._onKeyUp = onKeyUp.bind( this );
+		this._onPointerMove = onPointerMove.bind( this );
+		this._onPointerDown = onPointerDown.bind( this );
+		this._onPointerUp = onPointerUp.bind( this );
+		this._onPointerCancel = onPointerCancel.bind( this );
+		this._onContextMenu = onContextMenu.bind( this );
+
+		//
+
+		if ( domElement !== null ) {
+
+			this.connect();
+
+		}
+
+	}
+
+	connect() {
+
+		window.addEventListener( 'keydown', this._onKeyDown );
+		window.addEventListener( 'keyup', this._onKeyUp );
+
+		this.domElement.addEventListener( 'pointermove', this._onPointerMove );
+		this.domElement.addEventListener( 'pointerdown', this._onPointerDown );
+		this.domElement.addEventListener( 'pointerup', this._onPointerUp );
+		this.domElement.addEventListener( 'pointercancel', this._onPointerCancel );
+		this.domElement.addEventListener( 'contextmenu', this._onContextMenu );
+
+	}
+
+	disconnect() {
+
+		window.removeEventListener( 'keydown', this._onKeyDown );
+		window.removeEventListener( 'keyup', this._onKeyUp );
+
+		this.domElement.removeEventListener( 'pointermove', this._onPointerMove );
+		this.domElement.removeEventListener( 'pointerdown', this._onPointerDown );
+		this.domElement.removeEventListener( 'pointerup', this._onPointerUp );
+		this.domElement.removeEventListener( 'pointercancel', this._onPointerCancel );
+		this.domElement.removeEventListener( 'contextmenu', this._onContextMenu );
+
+	}
+
+	dispose() {
+
+		this.disconnect();
+
+	}
+
+	update( delta ) {
+
+		if ( this.enabled === false ) return;
+
+		const object = this.object;
+
+		const moveMult = delta * this.movementSpeed;
+		const rotMult = delta * this.rollSpeed;
+
+		object.translateX( this._moveVector.x * moveMult );
+		object.translateY( this._moveVector.y * moveMult );
+		object.translateZ( this._moveVector.z * moveMult );
+
+		_tmpQuaternion.set( this._rotationVector.x * rotMult, this._rotationVector.y * rotMult, this._rotationVector.z * rotMult, 1 ).normalize();
+		object.quaternion.multiply( _tmpQuaternion );
+
+		if (
+			this._lastPosition.distanceToSquared( object.position ) > _EPS ||
+			8 * ( 1 - this._lastQuaternion.dot( object.quaternion ) ) > _EPS
+		) {
+
+			this.dispatchEvent( _changeEvent );
+			this._lastQuaternion.copy( object.quaternion );
+			this._lastPosition.copy( object.position );
+
+		}
+
+	}
+
+	// private
+
+	_updateMovementVector() {
+
+		const forward = ( this._moveState.forward || ( this.autoForward && ! this._moveState.back ) ) ? 1 : 0;
+
+		this._moveVector.x = ( - this._moveState.left + this._moveState.right );
+		this._moveVector.y = ( - this._moveState.down + this._moveState.up );
+		this._moveVector.z = ( - forward + this._moveState.back );
+
+		//console.log( 'move:', [ this._moveVector.x, this._moveVector.y, this._moveVector.z ] );
+
+	}
+
+	_updateRotationVector() {
+
+		this._rotationVector.x = ( - this._moveState.pitchDown + this._moveState.pitchUp );
+		this._rotationVector.y = ( - this._moveState.yawRight + this._moveState.yawLeft );
+		this._rotationVector.z = ( - this._moveState.rollRight + this._moveState.rollLeft );
+
+		//console.log( 'rotate:', [ this._rotationVector.x, this._rotationVector.y, this._rotationVector.z ] );
+
+	}
+
+	_getContainerDimensions() {
+
+		if ( this.domElement != document ) {
+
+			return {
+				size: [ this.domElement.offsetWidth, this.domElement.offsetHeight ],
+				offset: [ this.domElement.offsetLeft, this.domElement.offsetTop ]
+			};
+
+		} else {
+
+			return {
+				size: [ window.innerWidth, window.innerHeight ],
+				offset: [ 0, 0 ]
+			};
+
+		}
+
+	}
+
+}
+
+function onKeyDown( event ) {
+
+	if ( event.altKey || this.enabled === false ) {
+
+		return;
+
+	}
+
+	switch ( event.code ) {
+
+		case 'ShiftLeft':
+		case 'ShiftRight': this.movementSpeedMultiplier = .1; break;
+
+		case 'KeyW': this._moveState.forward = 1; break;
+		case 'KeyS': this._moveState.back = 1; break;
+
+		case 'KeyA': this._moveState.left = 1; break;
+		case 'KeyD': this._moveState.right = 1; break;
+
+		case 'KeyR': this._moveState.up = 1; break;
+		case 'KeyF': this._moveState.down = 1; break;
+
+		case 'ArrowUp': this._moveState.pitchUp = 1; break;
+		case 'ArrowDown': this._moveState.pitchDown = 1; break;
+
+		case 'ArrowLeft': this._moveState.yawLeft = 1; break;
+		case 'ArrowRight': this._moveState.yawRight = 1; break;
+
+		case 'KeyQ': this._moveState.rollLeft = 1; break;
+		case 'KeyE': this._moveState.rollRight = 1; break;
+
+	}
+
+	this._updateMovementVector();
+	this._updateRotationVector();
+
+}
+
+function onKeyUp( event ) {
+
+	if ( this.enabled === false ) return;
+
+	switch ( event.code ) {
+
+		case 'ShiftLeft':
+		case 'ShiftRight': this.movementSpeedMultiplier = 1; break;
+
+		case 'KeyW': this._moveState.forward = 0; break;
+		case 'KeyS': this._moveState.back = 0; break;
+
+		case 'KeyA': this._moveState.left = 0; break;
+		case 'KeyD': this._moveState.right = 0; break;
+
+		case 'KeyR': this._moveState.up = 0; break;
+		case 'KeyF': this._moveState.down = 0; break;
+
+		case 'ArrowUp': this._moveState.pitchUp = 0; break;
+		case 'ArrowDown': this._moveState.pitchDown = 0; break;
+
+		case 'ArrowLeft': this._moveState.yawLeft = 0; break;
+		case 'ArrowRight': this._moveState.yawRight = 0; break;
+
+		case 'KeyQ': this._moveState.rollLeft = 0; break;
+		case 'KeyE': this._moveState.rollRight = 0; break;
+
+	}
+
+	this._updateMovementVector();
+	this._updateRotationVector();
+
+}
+
+function onPointerDown( event ) {
+
+	if ( this.enabled === false ) return;
+
+	if ( this.dragToLook ) {
+
+		this._status ++;
+
+	} else {
+
+		switch ( event.button ) {
+
+			case 0: this._moveState.forward = 1; break;
+			case 2: this._moveState.back = 1; break;
+
+		}
+
+		this._updateMovementVector();
+
+	}
+
+}
+
+function onPointerMove( event ) {
+
+	if ( this.enabled === false ) return;
+
+	if ( ! this.dragToLook || this._status > 0 ) {
+
+		const container = this._getContainerDimensions();
+		const halfWidth = container.size[ 0 ] / 2;
+		const halfHeight = container.size[ 1 ] / 2;
+
+		this._moveState.yawLeft = - ( ( event.pageX - container.offset[ 0 ] ) - halfWidth ) / halfWidth;
+		this._moveState.pitchDown = ( ( event.pageY - container.offset[ 1 ] ) - halfHeight ) / halfHeight;
+
+		this._updateRotationVector();
+
+	}
+
+}
+
+function onPointerUp( event ) {
+
+	if ( this.enabled === false ) return;
+
+	if ( this.dragToLook ) {
+
+		this._status --;
+
+		this._moveState.yawLeft = this._moveState.pitchDown = 0;
+
+	} else {
+
+		switch ( event.button ) {
+
+			case 0: this._moveState.forward = 0; break;
+			case 2: this._moveState.back = 0; break;
+
+		}
+
+		this._updateMovementVector();
+
+	}
+
+	this._updateRotationVector();
+
+}
+
+function onPointerCancel() {
+
+	if ( this.enabled === false ) return;
+
+	if ( this.dragToLook ) {
+
+		this._status = 0;
+
+		this._moveState.yawLeft = this._moveState.pitchDown = 0;
+
+	} else {
+
+		this._moveState.forward = 0;
+		this._moveState.back = 0;
+
+		this._updateMovementVector();
+
+	}
+
+	this._updateRotationVector();
+
+}
+
+function onContextMenu( event ) {
+
+	if ( this.enabled === false ) return;
+
+	event.preventDefault();
+
+}
+
+function setupFlyControls(store,{
+  movementSpeed=1, rollSpeed=0.005,
+  dragToLook=false,
+  autoForward = false,
+  }={}) {
+
+  const controls = new FlyControls( store.camera, store.domElement );
+  controls.movementSpeed = movementSpeed;
+  controls.rollSpeed = rollSpeed;
+  controls.autoForward  = autoForward;
+  controls.dragToLook  = dragToLook;
+  // console.log("??>>skdfbskdfb");
+
+  store.flyControls = controls;
+  store.currentControls = controls;
+
+  return store.flyControls;
+
+}
+
 function addResizeWindow(store) {
 
   window.addEventListener('resize', () => {
     store.renderer.setSize(window.innerWidth, window.innerHeight);
     store.camera.aspect = window.innerWidth / window.innerHeight;
     store.camera.updateProjectionMatrix();
+    if(store?.currentControls?.handleResize){
+      store.currentControls.handleResize();
+    }
   });
 
 
@@ -6425,7 +10203,9 @@ function setupGameLoopWithFPSClamp(store, fps = 60) {
       //   }
       // }
 
+      //
       const dt = clock.getDelta();
+
       for (let i = 0; i < store.sceneGrapth.length; i++) {
         const aa = store.sceneGrapth[i];
         if (aa.isSuperObject3D) {
@@ -6434,6 +10214,9 @@ function setupGameLoopWithFPSClamp(store, fps = 60) {
           }
           if (aa?.update) {
            aa.update(dt);
+          }
+          if(aa?.shouldAnimateMixer && aa.shouldAnimateMixer === true && aa.mixer){
+            aa.mixer.update(dt);
           }
         }
         // else if (aa.isObject3D) {
@@ -6448,16 +10231,37 @@ function setupGameLoopWithFPSClamp(store, fps = 60) {
       // for (let i = 0; i < store.gameLoopHooks.length; i++) {
       //   store.gameLoopHooks[i]();
       // }
+      //
+      // if(store.orbitControls && store.orbitControls.enableDamping){
+      //   store.orbitControls.update(dt);
+      // }
+      // else if(store.firstPersonControls) {
+      //   store.firstPersonControls.update( dt );
+      // }
 
-      if(store.orbitControls && store.orbitControls.enableDamping){
-        store.orbitControls.update();
+      if(store.currentControls){
+        store.currentControls.update(dt);
       }
 
-      store.renderer.render(store.scene, store.camera);
+      // render
+      if(store.postProcessing.useComposer === false){
+        store.renderer.render(store.scene, store.camera);
+      }
+      else if(store.postProcessing.useComposer && store.postProcessing.composer){
+        store.postProcessing.composer.render();
+      }
+
     }
     // requestAnimationFrame(animate);
 
+    // if (store.stats) {
+    //   // debugger
+    //   // console.log("?stats");
+    //   store.stats.update();
+    // }
+
   }
+
 
   store.renderer.setAnimationLoop(animate);
   // animate();
@@ -6489,6 +10293,17 @@ function init3d(store) {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFSoftShadowMap; // default THREE.PCFShadowMap
 
+  // ?????
+  // renderer.toneMapping = ReinhardToneMapping;
+  // export const NoToneMapping = 0;
+  // export const LinearToneMapping = 1;
+  // export const ReinhardToneMapping = 2;
+  // export const CineonToneMapping = 3;
+  // export const ACESFilmicToneMapping = 4;
+  // export const CustomToneMapping = 5;
+  // export const AgXToneMapping = 6;
+  // export const NeutralToneMapping = 7;
+
   // renderer.xr.addEventListener("sessionstart", sessionStart);
 
 
@@ -6508,1284 +10323,6 @@ function init3d(store) {
   // _o.camera.position.y = 0.2;
   _o.camera.position.z = 0.4;
   // _o.camera.position.x = 0.3;
-
-}
-
-// OrbitControls performs orbiting, dollying (zooming), and panning.
-// Unlike TrackballControls, it maintains the "up" direction object.up (+Y by default).
-//
-//    Orbit - left mouse / touch: one-finger move
-//    Zoom - middle mouse, or mousewheel / touch: two-finger spread or squish
-//    Pan - right mouse, or left mouse + ctrl/meta/shiftKey, or arrow keys / touch: two-finger move
-
-const _changeEvent = { type: 'change' };
-const _startEvent = { type: 'start' };
-const _endEvent = { type: 'end' };
-
-class OrbitControls extends EventDispatcher {
-
-	constructor( object, domElement ) {
-
-		super();
-
-		this.object = object;
-		this.domElement = domElement;
-		this.domElement.style.touchAction = 'none'; // disable touch scroll
-
-		// Set to false to disable this control
-		this.enabled = true;
-
-		// "target" sets the location of focus, where the object orbits around
-		this.target = new Vector3();
-
-		// How far you can dolly in and out ( PerspectiveCamera only )
-		this.minDistance = 0;
-		this.maxDistance = Infinity;
-
-		// How far you can zoom in and out ( OrthographicCamera only )
-		this.minZoom = 0;
-		this.maxZoom = Infinity;
-
-		// How far you can orbit vertically, upper and lower limits.
-		// Range is 0 to Math.PI radians.
-		this.minPolarAngle = 0; // radians
-		this.maxPolarAngle = Math.PI; // radians
-
-		// How far you can orbit horizontally, upper and lower limits.
-		// If set, the interval [ min, max ] must be a sub-interval of [ - 2 PI, 2 PI ], with ( max - min < 2 PI )
-		this.minAzimuthAngle = - Infinity; // radians
-		this.maxAzimuthAngle = Infinity; // radians
-
-		// Set to true to enable damping (inertia)
-		// If damping is enabled, you must call controls.update() in your animation loop
-		this.enableDamping = false;
-		this.dampingFactor = 0.05;
-
-		// This option actually enables dollying in and out; left as "zoom" for backwards compatibility.
-		// Set to false to disable zooming
-		this.enableZoom = true;
-		this.zoomSpeed = 1.0;
-
-		// Set to false to disable rotating
-		this.enableRotate = true;
-		this.rotateSpeed = 1.0;
-
-		// Set to false to disable panning
-		this.enablePan = true;
-		this.panSpeed = 1.0;
-		this.screenSpacePanning = true; // if false, pan orthogonal to world-space direction camera.up
-		this.keyPanSpeed = 7.0;	// pixels moved per arrow key push
-
-		// Set to true to automatically rotate around the target
-		// If auto-rotate is enabled, you must call controls.update() in your animation loop
-		this.autoRotate = false;
-		this.autoRotateSpeed = 2.0; // 30 seconds per orbit when fps is 60
-
-		// The four arrow keys
-		this.keys = { LEFT: 'ArrowLeft', UP: 'ArrowUp', RIGHT: 'ArrowRight', BOTTOM: 'ArrowDown' };
-
-		// Mouse buttons
-		this.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
-
-		// Touch fingers
-		this.touches = { ONE: TOUCH.ROTATE, TWO: TOUCH.DOLLY_PAN };
-
-		// for reset
-		this.target0 = this.target.clone();
-		this.position0 = this.object.position.clone();
-		this.zoom0 = this.object.zoom;
-
-		// the target DOM element for key events
-		this._domElementKeyEvents = null;
-
-		//
-		// public methods
-		//
-
-		this.getPolarAngle = function () {
-
-			return spherical.phi;
-
-		};
-
-		this.getAzimuthalAngle = function () {
-
-			return spherical.theta;
-
-		};
-
-		this.getDistance = function () {
-
-			return this.object.position.distanceTo( this.target );
-
-		};
-
-		this.listenToKeyEvents = function ( domElement ) {
-
-			domElement.addEventListener( 'keydown', onKeyDown );
-			this._domElementKeyEvents = domElement;
-
-		};
-
-		this.stopListenToKeyEvents = function () {
-
-			this._domElementKeyEvents.removeEventListener( 'keydown', onKeyDown );
-			this._domElementKeyEvents = null;
-
-		};
-
-		this.saveState = function () {
-
-			scope.target0.copy( scope.target );
-			scope.position0.copy( scope.object.position );
-			scope.zoom0 = scope.object.zoom;
-
-		};
-
-		this.reset = function () {
-
-			scope.target.copy( scope.target0 );
-			scope.object.position.copy( scope.position0 );
-			scope.object.zoom = scope.zoom0;
-
-			scope.object.updateProjectionMatrix();
-			scope.dispatchEvent( _changeEvent );
-
-			scope.update();
-
-			state = STATE.NONE;
-
-		};
-
-		// this method is exposed, but perhaps it would be better if we can make it private...
-		this.update = function () {
-
-			const offset = new Vector3();
-
-			// so camera.up is the orbit axis
-			const quat = new Quaternion().setFromUnitVectors( object.up, new Vector3( 0, 1, 0 ) );
-			const quatInverse = quat.clone().invert();
-
-			const lastPosition = new Vector3();
-			const lastQuaternion = new Quaternion();
-			const lastTargetPosition = new Vector3();
-
-			const twoPI = 2 * Math.PI;
-
-			return function update() {
-
-				const position = scope.object.position;
-
-				offset.copy( position ).sub( scope.target );
-
-				// rotate offset to "y-axis-is-up" space
-				offset.applyQuaternion( quat );
-
-				// angle from z-axis around y-axis
-				spherical.setFromVector3( offset );
-
-				if ( scope.autoRotate && state === STATE.NONE ) {
-
-					rotateLeft( getAutoRotationAngle() );
-
-				}
-
-				if ( scope.enableDamping ) {
-
-					spherical.theta += sphericalDelta.theta * scope.dampingFactor;
-					spherical.phi += sphericalDelta.phi * scope.dampingFactor;
-
-				} else {
-
-					spherical.theta += sphericalDelta.theta;
-					spherical.phi += sphericalDelta.phi;
-
-				}
-
-				// restrict theta to be between desired limits
-
-				let min = scope.minAzimuthAngle;
-				let max = scope.maxAzimuthAngle;
-
-				if ( isFinite( min ) && isFinite( max ) ) {
-
-					if ( min < - Math.PI ) min += twoPI; else if ( min > Math.PI ) min -= twoPI;
-
-					if ( max < - Math.PI ) max += twoPI; else if ( max > Math.PI ) max -= twoPI;
-
-					if ( min <= max ) {
-
-						spherical.theta = Math.max( min, Math.min( max, spherical.theta ) );
-
-					} else {
-
-						spherical.theta = ( spherical.theta > ( min + max ) / 2 ) ?
-							Math.max( min, spherical.theta ) :
-							Math.min( max, spherical.theta );
-
-					}
-
-				}
-
-				// restrict phi to be between desired limits
-				spherical.phi = Math.max( scope.minPolarAngle, Math.min( scope.maxPolarAngle, spherical.phi ) );
-
-				spherical.makeSafe();
-
-
-				spherical.radius *= scale;
-
-				// restrict radius to be between desired limits
-				spherical.radius = Math.max( scope.minDistance, Math.min( scope.maxDistance, spherical.radius ) );
-
-				// move target to panned location
-
-				if ( scope.enableDamping === true ) {
-
-					scope.target.addScaledVector( panOffset, scope.dampingFactor );
-
-				} else {
-
-					scope.target.add( panOffset );
-
-				}
-
-				offset.setFromSpherical( spherical );
-
-				// rotate offset back to "camera-up-vector-is-up" space
-				offset.applyQuaternion( quatInverse );
-
-				position.copy( scope.target ).add( offset );
-
-				scope.object.lookAt( scope.target );
-
-				if ( scope.enableDamping === true ) {
-
-					sphericalDelta.theta *= ( 1 - scope.dampingFactor );
-					sphericalDelta.phi *= ( 1 - scope.dampingFactor );
-
-					panOffset.multiplyScalar( 1 - scope.dampingFactor );
-
-				} else {
-
-					sphericalDelta.set( 0, 0, 0 );
-
-					panOffset.set( 0, 0, 0 );
-
-				}
-
-				scale = 1;
-
-				// update condition is:
-				// min(camera displacement, camera rotation in radians)^2 > EPS
-				// using small-angle approximation cos(x/2) = 1 - x^2 / 8
-
-				if ( zoomChanged ||
-					lastPosition.distanceToSquared( scope.object.position ) > EPS ||
-					8 * ( 1 - lastQuaternion.dot( scope.object.quaternion ) ) > EPS ||
-					lastTargetPosition.distanceToSquared( scope.target ) > 0 ) {
-
-					scope.dispatchEvent( _changeEvent );
-
-					lastPosition.copy( scope.object.position );
-					lastQuaternion.copy( scope.object.quaternion );
-					lastTargetPosition.copy( scope.target );
-
-					zoomChanged = false;
-
-					return true;
-
-				}
-
-				return false;
-
-			};
-
-		}();
-
-		this.dispose = function () {
-
-			scope.domElement.removeEventListener( 'contextmenu', onContextMenu );
-
-			scope.domElement.removeEventListener( 'pointerdown', onPointerDown );
-			scope.domElement.removeEventListener( 'pointercancel', onPointerUp );
-			scope.domElement.removeEventListener( 'wheel', onMouseWheel );
-
-			scope.domElement.removeEventListener( 'pointermove', onPointerMove );
-			scope.domElement.removeEventListener( 'pointerup', onPointerUp );
-
-
-			if ( scope._domElementKeyEvents !== null ) {
-
-				scope._domElementKeyEvents.removeEventListener( 'keydown', onKeyDown );
-				scope._domElementKeyEvents = null;
-
-			}
-
-			//scope.dispatchEvent( { type: 'dispose' } ); // should this be added here?
-
-		};
-
-		//
-		// internals
-		//
-
-		const scope = this;
-
-		const STATE = {
-			NONE: -1,
-			ROTATE: 0,
-			DOLLY: 1,
-			PAN: 2,
-			TOUCH_ROTATE: 3,
-			TOUCH_PAN: 4,
-			TOUCH_DOLLY_PAN: 5,
-			TOUCH_DOLLY_ROTATE: 6
-		};
-
-		let state = STATE.NONE;
-
-		const EPS = 0.000001;
-
-		// current position in spherical coordinates
-		const spherical = new Spherical();
-		const sphericalDelta = new Spherical();
-
-		let scale = 1;
-		const panOffset = new Vector3();
-		let zoomChanged = false;
-
-		const rotateStart = new Vector2();
-		const rotateEnd = new Vector2();
-		const rotateDelta = new Vector2();
-
-		const panStart = new Vector2();
-		const panEnd = new Vector2();
-		const panDelta = new Vector2();
-
-		const dollyStart = new Vector2();
-		const dollyEnd = new Vector2();
-		const dollyDelta = new Vector2();
-
-		const pointers = [];
-		const pointerPositions = {};
-
-		function getAutoRotationAngle() {
-
-			return 2 * Math.PI / 60 / 60 * scope.autoRotateSpeed;
-
-		}
-
-		function getZoomScale() {
-
-			return Math.pow( 0.95, scope.zoomSpeed );
-
-		}
-
-		function rotateLeft( angle ) {
-
-			sphericalDelta.theta -= angle;
-
-		}
-
-		function rotateUp( angle ) {
-
-			sphericalDelta.phi -= angle;
-
-		}
-
-		const panLeft = function () {
-
-			const v = new Vector3();
-
-			return function panLeft( distance, objectMatrix ) {
-
-				v.setFromMatrixColumn( objectMatrix, 0 ); // get X column of objectMatrix
-				v.multiplyScalar( - distance );
-
-				panOffset.add( v );
-
-			};
-
-		}();
-
-		const panUp = function () {
-
-			const v = new Vector3();
-
-			return function panUp( distance, objectMatrix ) {
-
-				if ( scope.screenSpacePanning === true ) {
-
-					v.setFromMatrixColumn( objectMatrix, 1 );
-
-				} else {
-
-					v.setFromMatrixColumn( objectMatrix, 0 );
-					v.crossVectors( scope.object.up, v );
-
-				}
-
-				v.multiplyScalar( distance );
-
-				panOffset.add( v );
-
-			};
-
-		}();
-
-		// deltaX and deltaY are in pixels; right and down are positive
-		const pan = function () {
-
-			const offset = new Vector3();
-
-			return function pan( deltaX, deltaY ) {
-
-				const element = scope.domElement;
-
-				if ( scope.object.isPerspectiveCamera ) {
-
-					// perspective
-					const position = scope.object.position;
-					offset.copy( position ).sub( scope.target );
-					let targetDistance = offset.length();
-
-					// half of the fov is center to top of screen
-					targetDistance *= Math.tan( ( scope.object.fov / 2 ) * Math.PI / 180.0 );
-
-					// we use only clientHeight here so aspect ratio does not distort speed
-					panLeft( 2 * deltaX * targetDistance / element.clientHeight, scope.object.matrix );
-					panUp( 2 * deltaY * targetDistance / element.clientHeight, scope.object.matrix );
-
-				} else if ( scope.object.isOrthographicCamera ) {
-
-					// orthographic
-					panLeft( deltaX * ( scope.object.right - scope.object.left ) / scope.object.zoom / element.clientWidth, scope.object.matrix );
-					panUp( deltaY * ( scope.object.top - scope.object.bottom ) / scope.object.zoom / element.clientHeight, scope.object.matrix );
-
-				} else {
-
-					// camera neither orthographic nor perspective
-					console.warn( 'WARNING: OrbitControls.js encountered an unknown camera type - pan disabled.' );
-					scope.enablePan = false;
-
-				}
-
-			};
-
-		}();
-
-		function dollyOut( dollyScale ) {
-
-			if ( scope.object.isPerspectiveCamera ) {
-
-				scale /= dollyScale;
-
-			} else if ( scope.object.isOrthographicCamera ) {
-
-				scope.object.zoom = Math.max( scope.minZoom, Math.min( scope.maxZoom, scope.object.zoom * dollyScale ) );
-				scope.object.updateProjectionMatrix();
-				zoomChanged = true;
-
-			} else {
-
-				console.warn( 'WARNING: OrbitControls.js encountered an unknown camera type - dolly/zoom disabled.' );
-				scope.enableZoom = false;
-
-			}
-
-		}
-
-		function dollyIn( dollyScale ) {
-
-			if ( scope.object.isPerspectiveCamera ) {
-
-				scale *= dollyScale;
-
-			} else if ( scope.object.isOrthographicCamera ) {
-
-				scope.object.zoom = Math.max( scope.minZoom, Math.min( scope.maxZoom, scope.object.zoom / dollyScale ) );
-				scope.object.updateProjectionMatrix();
-				zoomChanged = true;
-
-			} else {
-
-				console.warn( 'WARNING: OrbitControls.js encountered an unknown camera type - dolly/zoom disabled.' );
-				scope.enableZoom = false;
-
-			}
-
-		}
-
-		//
-		// event callbacks - update the object state
-		//
-
-		function handleMouseDownRotate( event ) {
-
-			rotateStart.set( event.clientX, event.clientY );
-
-		}
-
-		function handleMouseDownDolly( event ) {
-
-			dollyStart.set( event.clientX, event.clientY );
-
-		}
-
-		function handleMouseDownPan( event ) {
-
-			panStart.set( event.clientX, event.clientY );
-
-		}
-
-		function handleMouseMoveRotate( event ) {
-
-			rotateEnd.set( event.clientX, event.clientY );
-
-			rotateDelta.subVectors( rotateEnd, rotateStart ).multiplyScalar( scope.rotateSpeed );
-
-			const element = scope.domElement;
-
-			rotateLeft( 2 * Math.PI * rotateDelta.x / element.clientHeight ); // yes, height
-
-			rotateUp( 2 * Math.PI * rotateDelta.y / element.clientHeight );
-
-			rotateStart.copy( rotateEnd );
-
-			scope.update();
-
-		}
-
-		function handleMouseMoveDolly( event ) {
-
-			dollyEnd.set( event.clientX, event.clientY );
-
-			dollyDelta.subVectors( dollyEnd, dollyStart );
-
-			if ( dollyDelta.y > 0 ) {
-
-				dollyOut( getZoomScale() );
-
-			} else if ( dollyDelta.y < 0 ) {
-
-				dollyIn( getZoomScale() );
-
-			}
-
-			dollyStart.copy( dollyEnd );
-
-			scope.update();
-
-		}
-
-		function handleMouseMovePan( event ) {
-
-			panEnd.set( event.clientX, event.clientY );
-
-			panDelta.subVectors( panEnd, panStart ).multiplyScalar( scope.panSpeed );
-
-			pan( panDelta.x, panDelta.y );
-
-			panStart.copy( panEnd );
-
-			scope.update();
-
-		}
-
-		function handleMouseWheel( event ) {
-
-			if ( event.deltaY < 0 ) {
-
-				dollyIn( getZoomScale() );
-
-			} else if ( event.deltaY > 0 ) {
-
-				dollyOut( getZoomScale() );
-
-			}
-
-			scope.update();
-
-		}
-
-		function handleKeyDown( event ) {
-
-			let needsUpdate = false;
-
-			switch ( event.code ) {
-
-				case scope.keys.UP:
-
-					if ( event.ctrlKey || event.metaKey || event.shiftKey ) {
-
-						rotateUp( 2 * Math.PI * scope.rotateSpeed / scope.domElement.clientHeight );
-
-					} else {
-
-						pan( 0, scope.keyPanSpeed );
-
-					}
-
-					needsUpdate = true;
-					break;
-
-				case scope.keys.BOTTOM:
-
-					if ( event.ctrlKey || event.metaKey || event.shiftKey ) {
-
-						rotateUp( -2 * Math.PI * scope.rotateSpeed / scope.domElement.clientHeight );
-
-					} else {
-
-						pan( 0, - scope.keyPanSpeed );
-
-					}
-
-					needsUpdate = true;
-					break;
-
-				case scope.keys.LEFT:
-
-					if ( event.ctrlKey || event.metaKey || event.shiftKey ) {
-
-						rotateLeft( 2 * Math.PI * scope.rotateSpeed / scope.domElement.clientHeight );
-
-					} else {
-
-						pan( scope.keyPanSpeed, 0 );
-
-					}
-
-					needsUpdate = true;
-					break;
-
-				case scope.keys.RIGHT:
-
-					if ( event.ctrlKey || event.metaKey || event.shiftKey ) {
-
-						rotateLeft( -2 * Math.PI * scope.rotateSpeed / scope.domElement.clientHeight );
-
-					} else {
-
-						pan( - scope.keyPanSpeed, 0 );
-
-					}
-
-					needsUpdate = true;
-					break;
-
-			}
-
-			if ( needsUpdate ) {
-
-				// prevent the browser from scrolling on cursor keys
-				event.preventDefault();
-
-				scope.update();
-
-			}
-
-
-		}
-
-		function handleTouchStartRotate() {
-
-			if ( pointers.length === 1 ) {
-
-				rotateStart.set( pointers[ 0 ].pageX, pointers[ 0 ].pageY );
-
-			} else {
-
-				const x = 0.5 * ( pointers[ 0 ].pageX + pointers[ 1 ].pageX );
-				const y = 0.5 * ( pointers[ 0 ].pageY + pointers[ 1 ].pageY );
-
-				rotateStart.set( x, y );
-
-			}
-
-		}
-
-		function handleTouchStartPan() {
-
-			if ( pointers.length === 1 ) {
-
-				panStart.set( pointers[ 0 ].pageX, pointers[ 0 ].pageY );
-
-			} else {
-
-				const x = 0.5 * ( pointers[ 0 ].pageX + pointers[ 1 ].pageX );
-				const y = 0.5 * ( pointers[ 0 ].pageY + pointers[ 1 ].pageY );
-
-				panStart.set( x, y );
-
-			}
-
-		}
-
-		function handleTouchStartDolly() {
-
-			const dx = pointers[ 0 ].pageX - pointers[ 1 ].pageX;
-			const dy = pointers[ 0 ].pageY - pointers[ 1 ].pageY;
-
-			const distance = Math.sqrt( dx * dx + dy * dy );
-
-			dollyStart.set( 0, distance );
-
-		}
-
-		function handleTouchStartDollyPan() {
-
-			if ( scope.enableZoom ) handleTouchStartDolly();
-
-			if ( scope.enablePan ) handleTouchStartPan();
-
-		}
-
-		function handleTouchStartDollyRotate() {
-
-			if ( scope.enableZoom ) handleTouchStartDolly();
-
-			if ( scope.enableRotate ) handleTouchStartRotate();
-
-		}
-
-		function handleTouchMoveRotate( event ) {
-
-			if ( pointers.length == 1 ) {
-
-				rotateEnd.set( event.pageX, event.pageY );
-
-			} else {
-
-				const position = getSecondPointerPosition( event );
-
-				const x = 0.5 * ( event.pageX + position.x );
-				const y = 0.5 * ( event.pageY + position.y );
-
-				rotateEnd.set( x, y );
-
-			}
-
-			rotateDelta.subVectors( rotateEnd, rotateStart ).multiplyScalar( scope.rotateSpeed );
-
-			const element = scope.domElement;
-
-			rotateLeft( 2 * Math.PI * rotateDelta.x / element.clientHeight ); // yes, height
-
-			rotateUp( 2 * Math.PI * rotateDelta.y / element.clientHeight );
-
-			rotateStart.copy( rotateEnd );
-
-		}
-
-		function handleTouchMovePan( event ) {
-
-			if ( pointers.length === 1 ) {
-
-				panEnd.set( event.pageX, event.pageY );
-
-			} else {
-
-				const position = getSecondPointerPosition( event );
-
-				const x = 0.5 * ( event.pageX + position.x );
-				const y = 0.5 * ( event.pageY + position.y );
-
-				panEnd.set( x, y );
-
-			}
-
-			panDelta.subVectors( panEnd, panStart ).multiplyScalar( scope.panSpeed );
-
-			pan( panDelta.x, panDelta.y );
-
-			panStart.copy( panEnd );
-
-		}
-
-		function handleTouchMoveDolly( event ) {
-
-			const position = getSecondPointerPosition( event );
-
-			const dx = event.pageX - position.x;
-			const dy = event.pageY - position.y;
-
-			const distance = Math.sqrt( dx * dx + dy * dy );
-
-			dollyEnd.set( 0, distance );
-
-			dollyDelta.set( 0, Math.pow( dollyEnd.y / dollyStart.y, scope.zoomSpeed ) );
-
-			dollyOut( dollyDelta.y );
-
-			dollyStart.copy( dollyEnd );
-
-		}
-
-		function handleTouchMoveDollyPan( event ) {
-
-			if ( scope.enableZoom ) handleTouchMoveDolly( event );
-
-			if ( scope.enablePan ) handleTouchMovePan( event );
-
-		}
-
-		function handleTouchMoveDollyRotate( event ) {
-
-			if ( scope.enableZoom ) handleTouchMoveDolly( event );
-
-			if ( scope.enableRotate ) handleTouchMoveRotate( event );
-
-		}
-
-		//
-		// event handlers - FSM: listen for events and reset state
-		//
-
-		function onPointerDown( event ) {
-
-			if ( scope.enabled === false ) return;
-
-			if ( pointers.length === 0 ) {
-
-				scope.domElement.setPointerCapture( event.pointerId );
-
-				scope.domElement.addEventListener( 'pointermove', onPointerMove );
-				scope.domElement.addEventListener( 'pointerup', onPointerUp );
-
-			}
-
-			//
-
-			addPointer( event );
-
-			if ( event.pointerType === 'touch' ) {
-
-				onTouchStart( event );
-
-			} else {
-
-				onMouseDown( event );
-
-			}
-
-		}
-
-		function onPointerMove( event ) {
-
-			if ( scope.enabled === false ) return;
-
-			if ( event.pointerType === 'touch' ) {
-
-				onTouchMove( event );
-
-			} else {
-
-				onMouseMove( event );
-
-			}
-
-		}
-
-		function onPointerUp( event ) {
-
-			removePointer( event );
-
-			if ( pointers.length === 0 ) {
-
-				scope.domElement.releasePointerCapture( event.pointerId );
-
-				scope.domElement.removeEventListener( 'pointermove', onPointerMove );
-				scope.domElement.removeEventListener( 'pointerup', onPointerUp );
-
-			}
-
-			scope.dispatchEvent( _endEvent );
-
-			state = STATE.NONE;
-
-		}
-
-		function onMouseDown( event ) {
-
-			let mouseAction;
-
-			switch ( event.button ) {
-
-				case 0:
-
-					mouseAction = scope.mouseButtons.LEFT;
-					break;
-
-				case 1:
-
-					mouseAction = scope.mouseButtons.MIDDLE;
-					break;
-
-				case 2:
-
-					mouseAction = scope.mouseButtons.RIGHT;
-					break;
-
-				default:
-
-					mouseAction = -1;
-
-			}
-
-			switch ( mouseAction ) {
-
-				case MOUSE.DOLLY:
-
-					if ( scope.enableZoom === false ) return;
-
-					handleMouseDownDolly( event );
-
-					state = STATE.DOLLY;
-
-					break;
-
-				case MOUSE.ROTATE:
-
-					if ( event.ctrlKey || event.metaKey || event.shiftKey ) {
-
-						if ( scope.enablePan === false ) return;
-
-						handleMouseDownPan( event );
-
-						state = STATE.PAN;
-
-					} else {
-
-						if ( scope.enableRotate === false ) return;
-
-						handleMouseDownRotate( event );
-
-						state = STATE.ROTATE;
-
-					}
-
-					break;
-
-				case MOUSE.PAN:
-
-					if ( event.ctrlKey || event.metaKey || event.shiftKey ) {
-
-						if ( scope.enableRotate === false ) return;
-
-						handleMouseDownRotate( event );
-
-						state = STATE.ROTATE;
-
-					} else {
-
-						if ( scope.enablePan === false ) return;
-
-						handleMouseDownPan( event );
-
-						state = STATE.PAN;
-
-					}
-
-					break;
-
-				default:
-
-					state = STATE.NONE;
-
-			}
-
-			if ( state !== STATE.NONE ) {
-
-				scope.dispatchEvent( _startEvent );
-
-			}
-
-		}
-
-		function onMouseMove( event ) {
-
-			switch ( state ) {
-
-				case STATE.ROTATE:
-
-					if ( scope.enableRotate === false ) return;
-
-					handleMouseMoveRotate( event );
-
-					break;
-
-				case STATE.DOLLY:
-
-					if ( scope.enableZoom === false ) return;
-
-					handleMouseMoveDolly( event );
-
-					break;
-
-				case STATE.PAN:
-
-					if ( scope.enablePan === false ) return;
-
-					handleMouseMovePan( event );
-
-					break;
-
-			}
-
-		}
-
-		function onMouseWheel( event ) {
-
-			if ( scope.enabled === false || scope.enableZoom === false || state !== STATE.NONE ) return;
-
-			event.preventDefault();
-
-			scope.dispatchEvent( _startEvent );
-
-			handleMouseWheel( event );
-
-			scope.dispatchEvent( _endEvent );
-
-		}
-
-		function onKeyDown( event ) {
-
-			if ( scope.enabled === false || scope.enablePan === false ) return;
-
-			handleKeyDown( event );
-
-		}
-
-		function onTouchStart( event ) {
-
-			trackPointer( event );
-
-			switch ( pointers.length ) {
-
-				case 1:
-
-					switch ( scope.touches.ONE ) {
-
-						case TOUCH.ROTATE:
-
-							if ( scope.enableRotate === false ) return;
-
-							handleTouchStartRotate();
-
-							state = STATE.TOUCH_ROTATE;
-
-							break;
-
-						case TOUCH.PAN:
-
-							if ( scope.enablePan === false ) return;
-
-							handleTouchStartPan();
-
-							state = STATE.TOUCH_PAN;
-
-							break;
-
-						default:
-
-							state = STATE.NONE;
-
-					}
-
-					break;
-
-				case 2:
-
-					switch ( scope.touches.TWO ) {
-
-						case TOUCH.DOLLY_PAN:
-
-							if ( scope.enableZoom === false && scope.enablePan === false ) return;
-
-							handleTouchStartDollyPan();
-
-							state = STATE.TOUCH_DOLLY_PAN;
-
-							break;
-
-						case TOUCH.DOLLY_ROTATE:
-
-							if ( scope.enableZoom === false && scope.enableRotate === false ) return;
-
-							handleTouchStartDollyRotate();
-
-							state = STATE.TOUCH_DOLLY_ROTATE;
-
-							break;
-
-						default:
-
-							state = STATE.NONE;
-
-					}
-
-					break;
-
-				default:
-
-					state = STATE.NONE;
-
-			}
-
-			if ( state !== STATE.NONE ) {
-
-				scope.dispatchEvent( _startEvent );
-
-			}
-
-		}
-
-		function onTouchMove( event ) {
-
-			trackPointer( event );
-
-			switch ( state ) {
-
-				case STATE.TOUCH_ROTATE:
-
-					if ( scope.enableRotate === false ) return;
-
-					handleTouchMoveRotate( event );
-
-					scope.update();
-
-					break;
-
-				case STATE.TOUCH_PAN:
-
-					if ( scope.enablePan === false ) return;
-
-					handleTouchMovePan( event );
-
-					scope.update();
-
-					break;
-
-				case STATE.TOUCH_DOLLY_PAN:
-
-					if ( scope.enableZoom === false && scope.enablePan === false ) return;
-
-					handleTouchMoveDollyPan( event );
-
-					scope.update();
-
-					break;
-
-				case STATE.TOUCH_DOLLY_ROTATE:
-
-					if ( scope.enableZoom === false && scope.enableRotate === false ) return;
-
-					handleTouchMoveDollyRotate( event );
-
-					scope.update();
-
-					break;
-
-				default:
-
-					state = STATE.NONE;
-
-			}
-
-		}
-
-		function onContextMenu( event ) {
-
-			if ( scope.enabled === false ) return;
-
-			event.preventDefault();
-
-		}
-
-		function addPointer( event ) {
-
-			pointers.push( event );
-
-		}
-
-		function removePointer( event ) {
-
-			delete pointerPositions[ event.pointerId ];
-
-			for ( let i = 0; i < pointers.length; i ++ ) {
-
-				if ( pointers[ i ].pointerId == event.pointerId ) {
-
-					pointers.splice( i, 1 );
-					return;
-
-				}
-
-			}
-
-		}
-
-		function trackPointer( event ) {
-
-			let position = pointerPositions[ event.pointerId ];
-
-			if ( position === undefined ) {
-
-				position = new Vector2();
-				pointerPositions[ event.pointerId ] = position;
-
-			}
-
-			position.set( event.pageX, event.pageY );
-
-		}
-
-		function getSecondPointerPosition( event ) {
-
-			const pointer = ( event.pointerId === pointers[ 0 ].pointerId ) ? pointers[ 1 ] : pointers[ 0 ];
-
-			return pointerPositions[ pointer.pointerId ];
-
-		}
-
-		//
-
-		scope.domElement.addEventListener( 'contextmenu', onContextMenu );
-
-		scope.domElement.addEventListener( 'pointerdown', onPointerDown );
-		scope.domElement.addEventListener( 'pointercancel', onPointerUp );
-		scope.domElement.addEventListener( 'wheel', onMouseWheel, { passive: false } );
-
-		// force an update at start
-
-		this.update();
-
-	}
-
-}
-
-function setupOrbitController(store) {
-
-  // if ( ! store.xr.IS_XR_AVAIL ) {
-    // if ( false ) {
-    // we remove the priour renderer.domElement for webxrs overlay requirement
-    // const mm = document.getElementById("rootlike");
-    const orbitControls = new OrbitControls( store.camera, store.domElement );
-    // window.aa = orbitControls;
-    // orbitControls.addEventListener( 'change', render ); // use if there is no animation loop
-    orbitControls.minDistance = 0.2;
-    orbitControls.maxDistance = 100;
-    // orbitControls.target.set( 0, 0, - 0.2 );
-    orbitControls.enableDamping = true;
-    orbitControls.dampingFactor = 0.05;
-    // orbitControls.rotateSpeed = 5;
-    // orbitControls.update();
-    orbitControls.enableDamping = true;
-    store.orbitControls = orbitControls;
-
-  // }
 
 }
 
@@ -7924,6 +10461,186 @@ function setupTouchEvents(store){
 
 }
 
+//
+
+function setupBloomRendering(store, { resolution, strength, radius, threshold}={}) {
+  store.postProcessing.bootUpBloom(store, {resolution:resolution, strength:strength, radius:radius, threshold:threshold});
+}
+
+var Stats = function () {
+
+	var mode = 0;
+
+	var container = document.createElement( 'div' );
+	container.style.cssText = 'position:fixed;top:0;left:0;cursor:pointer;opacity:0.9;z-index:10000';
+	container.addEventListener( 'click', function ( event ) {
+
+		event.preventDefault();
+		showPanel( ++ mode % container.children.length );
+
+	}, false );
+
+	//
+
+	function addPanel( panel ) {
+
+		container.appendChild( panel.dom );
+		return panel;
+
+	}
+
+	function showPanel( id ) {
+
+		for ( var i = 0; i < container.children.length; i ++ ) {
+
+			container.children[ i ].style.display = i === id ? 'block' : 'none';
+
+		}
+
+		mode = id;
+
+	}
+
+	//
+
+	var beginTime = ( performance || Date ).now(), prevTime = beginTime, frames = 0;
+
+	var fpsPanel = addPanel( new Stats.Panel( 'FPS', '#0ff', '#002' ) );
+	var msPanel = addPanel( new Stats.Panel( 'MS', '#0f0', '#020' ) );
+
+	if ( self.performance && self.performance.memory ) {
+
+		var memPanel = addPanel( new Stats.Panel( 'MB', '#f08', '#201' ) );
+
+	}
+
+	showPanel( 0 );
+
+	return {
+
+		REVISION: 16,
+
+		dom: container,
+
+		addPanel: addPanel,
+		showPanel: showPanel,
+
+		begin: function () {
+
+			beginTime = ( performance || Date ).now();
+
+		},
+
+		end: function () {
+
+			frames ++;
+
+			var time = ( performance || Date ).now();
+
+			msPanel.update( time - beginTime, 200 );
+
+			if ( time >= prevTime + 1000 ) {
+
+				fpsPanel.update( ( frames * 1000 ) / ( time - prevTime ), 100 );
+
+				prevTime = time;
+				frames = 0;
+
+				if ( memPanel ) {
+
+					var memory = performance.memory;
+					memPanel.update( memory.usedJSHeapSize / 1048576, memory.jsHeapSizeLimit / 1048576 );
+
+				}
+
+			}
+
+			return time;
+
+		},
+
+		update: function () {
+
+			beginTime = this.end();
+
+		},
+
+		// Backwards Compatibility
+
+		domElement: container,
+		setMode: showPanel
+
+	};
+
+};
+
+Stats.Panel = function ( name, fg, bg ) {
+
+	var min = Infinity, max = 0, round = Math.round;
+	var PR = round( window.devicePixelRatio || 1 );
+
+	var WIDTH = 80 * PR, HEIGHT = 48 * PR,
+		TEXT_X = 3 * PR, TEXT_Y = 2 * PR,
+		GRAPH_X = 3 * PR, GRAPH_Y = 15 * PR,
+		GRAPH_WIDTH = 74 * PR, GRAPH_HEIGHT = 30 * PR;
+
+	var canvas = document.createElement( 'canvas' );
+	canvas.width = WIDTH;
+	canvas.height = HEIGHT;
+	canvas.style.cssText = 'width:80px;height:48px';
+
+	var context = canvas.getContext( '2d' );
+	context.font = 'bold ' + ( 9 * PR ) + 'px Helvetica,Arial,sans-serif';
+	context.textBaseline = 'top';
+
+	context.fillStyle = bg;
+	context.fillRect( 0, 0, WIDTH, HEIGHT );
+
+	context.fillStyle = fg;
+	context.fillText( name, TEXT_X, TEXT_Y );
+	context.fillRect( GRAPH_X, GRAPH_Y, GRAPH_WIDTH, GRAPH_HEIGHT );
+
+	context.fillStyle = bg;
+	context.globalAlpha = 0.9;
+	context.fillRect( GRAPH_X, GRAPH_Y, GRAPH_WIDTH, GRAPH_HEIGHT );
+
+	return {
+
+		dom: canvas,
+
+		update: function ( value, maxValue ) {
+
+			min = Math.min( min, value );
+			max = Math.max( max, value );
+
+			context.fillStyle = bg;
+			context.globalAlpha = 1;
+			context.fillRect( 0, 0, WIDTH, GRAPH_Y );
+			context.fillStyle = fg;
+			context.fillText( round( value ) + ' ' + name + ' (' + round( min ) + '-' + round( max ) + ')', TEXT_X, TEXT_Y );
+
+			context.drawImage( canvas, GRAPH_X + PR, GRAPH_Y, GRAPH_WIDTH - PR, GRAPH_HEIGHT, GRAPH_X, GRAPH_Y, GRAPH_WIDTH - PR, GRAPH_HEIGHT );
+
+			context.fillRect( GRAPH_X + GRAPH_WIDTH - PR, GRAPH_Y, PR, GRAPH_HEIGHT );
+
+			context.fillStyle = bg;
+			context.globalAlpha = 0.9;
+			context.fillRect( GRAPH_X + GRAPH_WIDTH - PR, GRAPH_Y, PR, round( ( 1 - ( value / maxValue ) ) * GRAPH_HEIGHT ) );
+
+		}
+
+	};
+
+};
+
+function setupStats(store) {
+  store.stats = new Stats();
+  // debugger
+	store.domElement.appendChild( store.stats.dom );
+	// window.body.appendChild( store.stats.dom );
+  // debugger
+}
+
 class PhysicsModel{
 
   session = null; // T : PhysicsSession
@@ -7972,10 +10689,6 @@ class PhysicsModel{
   }
 
 }
-
-// import { decoSuper3D } from './decoSuper3D.js';
-const decoSuper3D$2 = await Promise.resolve().then(function () { return decoSuper3D$1; });
-
 
 class SuperObject3D extends Object3D{
   tacos = 2;
@@ -8078,7 +10791,7 @@ class SuperObject3D extends Object3D{
 
     cloned.children = this.children.map((child) => {
       const childClone = child.clone();
-      return childClone instanceof Object3D ? decoSuper3D$2(childClone) : childClone;
+      return childClone instanceof Object3D ? decoSuper3D(childClone) : childClone;
     });
 
     return cloned;
@@ -8220,64 +10933,77 @@ class SuperObject3D extends Object3D{
     }
 
   }
-}
 
-// some ai
-// export function DecorateWithSuperObject3D(obj) {
-function decoSuper3D(obj) {
-  if (!(obj instanceof Object3D) ) {
-    console.warn('The object must be an instance of Object3D.');
-    return obj;
-  }
 
-  const superObject = new SuperObject3D();
 
-  // dont use
-  // Object.assign(obj, superObject);
-  // does not get classical props like .position etc
 
-  // so use the more wordy workers
-  for (const key of Object.keys(superObject)) {
-    if (!Object.getOwnPropertyDescriptor(obj, key)) {
-      obj[key] = superObject[key];
+
+
+  // decorator for SuperObject3D
+  // wrap the Object3D in SuperObject3D changing the prototype
+
+
+  // import { Object3D, Mesh } from 'three';
+  // import { SuperObject3D } from './superObject3D.js';
+
+  // some ai
+  // export function DecorateWithSuperObject3D(obj) {
+  static decoSuper3D(obj) {
+    if (!(obj instanceof Object3D) ) {
+      console.warn('The object must be an instance of Object3D.');
+      return obj;
     }
-  }
 
-  // Copy prototype methods (e.g., fish)
-  Object.getOwnPropertyNames(SuperObject3D.prototype).forEach((key) => {
-    if (key !== 'constructor') {
-      obj[key] = superObject[key].bind(obj);
+    const superObject = new SuperObject3D();
+
+    // dont use
+    // Object.assign(obj, superObject);
+    // does not get classical props like .position etc
+
+    // so use the more wordy workers
+    for (const key of Object.keys(superObject)) {
+      if (!Object.getOwnPropertyDescriptor(obj, key)) {
+        obj[key] = superObject[key];
+      }
     }
-  });
+
+    // Copy prototype methods (e.g., fish)
+    Object.getOwnPropertyNames(SuperObject3D.prototype).forEach((key) => {
+      if (key !== 'constructor') {
+        obj[key] = superObject[key].bind(obj);
+      }
+    });
 
 
-  // Copy child objects and replace them with decorated versions
-  superObject.children = obj.children.map(decoSuper3D);
+    // Copy child objects and replace them with decorated versions
+    superObject.children = obj.children.map(SuperObject3D.decoSuper3D);
 
-  if (obj instanceof Mesh) {
-    // will need .clone() on these otherwise they hold refs
-    superObject.material = obj.material;  // Preserve material references
-    superObject.geometry = obj.geometry;  // Preserve geometry
+    if (obj instanceof Mesh) {
+      // will need .clone() on these otherwise they hold refs
+      superObject.material = obj.material;  // Preserve material references
+      superObject.geometry = obj.geometry;  // Preserve geometry
+    }
+
+
+    return superObject;
+
+
   }
-
-
-  return superObject;
-
 
 }
-
-var decoSuper3D$1 = /*#__PURE__*/Object.freeze({
-  __proto__: null,
-  decoSuper3D: decoSuper3D
-});
 
 class ModelLoaderObject3D extends SuperObject3D{
   isModelLoaded = true;
   isRoot = true;
   selectorMesh = null;
   modelUrl = '';
+
   animations = null;
   mixer = null;
+  actions = {};
+  shouldAnimateMixer = false;
+  previousAction = null;
+  currentAction = null;
 
   constructor(modelUrl){
     super();
@@ -8294,6 +11020,23 @@ class ModelLoaderObject3D extends SuperObject3D{
     // this.mixer = gltf.scene.mixer;
     this.mixer = new AnimationMixer( gltf.scene );
 
+    this.actions = {};
+
+		for ( let i = 0; i < this.animations.length; i ++ ) {
+
+			const clip = this.animations[ i ];
+			const action = this.mixer.clipAction( clip );
+			this.actions[ clip.name ] = action;
+
+			// if ( emotes.indexOf( clip.name ) >= 0 || states.indexOf( clip.name ) >= 4 ) {
+      //
+			// 	action.clampWhenFinished = true;
+			// 	action.loop = THREE.LoopOnce;
+      //
+			// }
+
+		}
+
 // debugger
     this.update = function(deltaTime) {
       // this.super.update(deltaTime);
@@ -8306,7 +11049,7 @@ class ModelLoaderObject3D extends SuperObject3D{
   // store is curious
   wrap(gltf, store){
     let model = gltf.scene;
-    decoSuper3D(model);
+    SuperObject3D.decoSuper3D(model);
     this.add(model);
     // need to store the gltf animations and other meta data here
     // skip for now, since project does not need it
@@ -8683,10 +11426,11 @@ class Preloader{
 // import foof from './foof.js';
 const Primitives = {
   ball : ball,
-  line : line
+  line : line,
+  plane : plane
 };
 const Lights = {
   hemisphereLight : hemisphereLight
 };
 
-export { APP, CheapPool, DeltaFrame, Force, Lights, MaterialProxy, ModelLoaderObject3D, PhysicsModel, PhysicsSession, Preloader, Primitives, REVISION, RollyController, Spring$1 as Spring, SuperObject3D, spinners as a_spinners, addResizeWindow, animateDeco, applyAngularForce, applyForce$1 as applyForce, applySpringForce$1 as applySpringForce, checkIfFileExists, decoSuper3D, foof, handlePointerMove, handleTouchStart, handleTouchStop, init3d, narf, setupDebuggerHitPoint, setupGameLoopWithFPSClamp, setupGridHelper, setupKeyboardEvents, setupOrbitController, setupPlaneHelper, setupShadowPlane, setupTouchEvents, setupXR, setupXRLighting, setupXRRenderLoopHook, testOrbitControlsToggle, touchEventsData, utilites };
+export { APP, CheapPool, DeltaFrame, Force, Lights, MaterialProxy, ModelLoaderObject3D, PhysicsModel, PhysicsSession, Preloader, Primitives, REVISION, RollyController, Spring$1 as Spring, SuperObject3D, spinners as a_spinners, addResizeWindow, animateDeco, applyAngularForce, applyForce$1 as applyForce, applySpringForce$1 as applySpringForce, checkIfFileExists, foof, handlePointerMove, handleTouchStart, handleTouchStop, init3d, narf, setupBloomRendering, setupDebuggerHitPoint, setupFirstPersonControls, setupFlyControls, setupGameLoopWithFPSClamp, setupGridHelper, setupKeyboardEvents, setupOrbitController, setupPlaneHelper, setupShadowPlane, setupStats, setupTouchEvents, setupXR, setupXRLighting, setupXRRenderLoopHook, testOrbitControlsToggle, touchEventsData, utilites };
