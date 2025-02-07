@@ -65,7 +65,8 @@ export const APP = {
 
   loadingStack: new CheapPool(),
   // gameLoopHooks: new CheapPool(),
-  animationStack: new CheapPool(),
+  // animationStack: new CheapPool(),
+  // sceneGrapth is used to have animated things and others later
   sceneGrapth: new CheapPool(),
   raycastingGraph: new CheapPool(),
 
@@ -212,8 +213,12 @@ export const APP = {
   // addObject3D(item){
   // just DONT do scene.add() cause that will breaks all parent models
   addObject3D(item){
+    this.scene.add(item);
     this.sceneGrapth.add(item);
     // this.animationStack.add(item);
+  },
+
+  addObject3DRaycasting (item){
     this.raycastingGraph.add(item);
   }
 

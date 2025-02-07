@@ -2,7 +2,7 @@
 // use export decoSuper3D(obj)
 // to patch the Object3D
 
-import { Object3D, Mesh } from 'three';
+import { Object3D, Mesh, Box3, Vector3 } from 'three';
 import { CheapPool } from '@tools/cheapPool.js';
 
 // import { decoSuper3D } from './decoSuper3D.js';
@@ -10,7 +10,9 @@ import { CheapPool } from '@tools/cheapPool.js';
 
 import { PhysicsModel } from './physicsModel.js';
 
-
+const box3 = new Box3();
+const boxSizeVector = new Vector3();
+const boxCenterVector = new Vector3();
 
 
 export class SuperObject3D extends Object3D{
@@ -258,7 +260,65 @@ export class SuperObject3D extends Object3D{
   }
 
 
+  // r: Vector3
+  getBoxSize(){
+    this.updateMatrix();
+    box3.setFromObject(this);
+    return box3.getSize(boxSizeVector);
+  }
 
+  // r : Vector3
+  getBoxCenter(){
+    this.updateMatrix();
+    box3.setFromObject(this);
+    return box3.getCenter(boxCenterVector);
+  }
+
+  // r: tuple
+  getSizeAndCenter(){
+    this.updateMatrix();
+    box3.setFromObject(this);
+    return {size: box3.getSize(boxSizeVector), center: box3.getCenter(boxCenterVector), box: box3}
+  }
+
+  scaleTo(val){
+    const sizeV = this.getBoxSize();
+    const maxDim = Math.max(sizeV.x, sizeV.y, sizeV.z);
+    const scaleFactor = val / maxDim;
+    this.scale.set(scaleFactor, scaleFactor, scaleFactor);
+  }
+
+
+
+  fullyRemoveObject(object3D){
+    if (!(object3D instanceof Object3D)) return false;
+
+    // for better memory management and performance
+    if (object3D.geometry) object3D.geometry.dispose();
+
+    if (object3D.material) {
+        if (object3D.material instanceof Array) {
+            // for better memory management and performance
+            object3D.material.forEach(material => material.dispose());
+        } else {
+            // for better memory management and performance
+            object3D.material.dispose();
+        }
+    }
+    object3D.removeFromParent(); // the parent might be the scene or another Object3D, but it is sure to be removed this way
+    return true;
+
+  }
+
+  fullyRemoveObjectWithName(name){
+    const mm = this.getObjectByName(name);
+    if (mm) {
+      return this.fullyRemoveObject(mm);
+    }
+    else{
+      console.log('object not found');
+    }
+  }
 
 
 

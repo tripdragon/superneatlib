@@ -1,5 +1,6 @@
-import { OrthographicCamera, Mesh, BufferGeometry, Float32BufferAttribute, ShaderMaterial, UniformsUtils, Vector2, WebGLRenderTarget, HalfFloatType, NoBlending, Clock, Color, Vector3, AdditiveBlending, MeshBasicMaterial, RawShaderMaterial, ColorManagement, SRGBTransfer, LinearToneMapping, ReinhardToneMapping, CineonToneMapping, ACESFilmicToneMapping, AgXToneMapping, NeutralToneMapping, Matrix4, TrianglesDrawMode, TriangleFanDrawMode, TriangleStripDrawMode, Loader, LoaderUtils, FileLoader, LinearSRGBColorSpace, SpotLight, PointLight, DirectionalLight, SRGBColorSpace, MeshPhysicalMaterial, Quaternion, InstancedMesh, InstancedBufferAttribute, Object3D, TextureLoader, ImageBitmapLoader, BufferAttribute, InterleavedBuffer, InterleavedBufferAttribute, LinearFilter, LinearMipmapLinearFilter, RepeatWrapping, NearestFilter, PointsMaterial, Material, LineBasicMaterial, MeshStandardMaterial, DoubleSide, PropertyBinding, SkinnedMesh, LineSegments, Line, LineLoop, Points, Group, PerspectiveCamera, MathUtils, Skeleton, AnimationClip, Bone, InterpolateLinear, NearestMipmapNearestFilter, LinearMipmapNearestFilter, NearestMipmapLinearFilter, ClampToEdgeWrapping, MirroredRepeatWrapping, InterpolateDiscrete, FrontSide, Texture, VectorKeyframeTrack, NumberKeyframeTrack, QuaternionKeyframeTrack, Box3, Sphere, Interpolant, Raycaster, Plane, EventDispatcher, PlaneHelper, SphereGeometry, LineCurve3, TubeGeometry, PlaneGeometry, HemisphereLight, HemisphereLightHelper, LightProbe, WebGLCubeRenderTarget, Ray, Controls, MOUSE, TOUCH, Spherical, WebGLRenderer, PCFSoftShadowMap, Scene, GridHelper, ShadowMaterial, AnimationMixer } from 'three';
+import { OrthographicCamera, Mesh, BufferGeometry, Float32BufferAttribute, ShaderMaterial, UniformsUtils, Vector2, WebGLRenderTarget, HalfFloatType, NoBlending, Clock, Color, Vector3, AdditiveBlending, MeshBasicMaterial, RawShaderMaterial, ColorManagement, SRGBTransfer, LinearToneMapping, ReinhardToneMapping, CineonToneMapping, ACESFilmicToneMapping, AgXToneMapping, NeutralToneMapping, Matrix4, TrianglesDrawMode, TriangleFanDrawMode, TriangleStripDrawMode, Loader, LoaderUtils, FileLoader, LinearSRGBColorSpace, SpotLight, PointLight, DirectionalLight, SRGBColorSpace, MeshPhysicalMaterial, Quaternion, InstancedMesh, InstancedBufferAttribute, Object3D, TextureLoader, ImageBitmapLoader, BufferAttribute, InterleavedBuffer, InterleavedBufferAttribute, LinearFilter, LinearMipmapLinearFilter, RepeatWrapping, NearestFilter, PointsMaterial, Material, LineBasicMaterial, MeshStandardMaterial, DoubleSide, PropertyBinding, SkinnedMesh, LineSegments, Line, LineLoop, Points, Group, PerspectiveCamera, MathUtils, Skeleton, AnimationClip, Bone, InterpolateLinear, NearestMipmapNearestFilter, LinearMipmapNearestFilter, NearestMipmapLinearFilter, ClampToEdgeWrapping, MirroredRepeatWrapping, InterpolateDiscrete, FrontSide, Texture, VectorKeyframeTrack, NumberKeyframeTrack, QuaternionKeyframeTrack, Box3, Sphere, Interpolant, Raycaster, Plane, EventDispatcher, PlaneHelper, SphereGeometry, LineCurve3, TubeGeometry, PlaneGeometry, HemisphereLight, HemisphereLightHelper, LightProbe, WebGLCubeRenderTarget, Ray, Controls, MOUSE, TOUCH, Spherical, WebGLRenderer, PCFSoftShadowMap, Scene, GridHelper, ShadowMaterial, AnimationMixer, LoopOnce } from 'three';
 import GUI from 'lil-gui';
+import { init3d as init3d$1, setupOrbitController as setupOrbitController$1, setupGameLoopWithFPSClamp as setupGameLoopWithFPSClamp$1, addResizeWindow as addResizeWindow$1, setupPlaneHelper as setupPlaneHelper$1, setupGridHelper as setupGridHelper$1, Lights as Lights$1 } from 'superneatlib';
 
 const REVISION = 1;
 
@@ -33,10 +34,25 @@ function randomBetweenNegPos(val) {
   return (Math.random() * (max - min) + min) * a;
 }
 
+function remap(value, inMin, inMax, outMin, outMax) {
+  return ((value - inMin) * (outMax - outMin)) / (inMax - inMin) + outMin;
+}
+
+
+// https://stackoverflow.com/a/12646864
+function shuffleArray(array) {
+    for (let i = array.length - 1; i >= 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+}
+
 var utilites = /*#__PURE__*/Object.freeze({
   __proto__: null,
   randomBetween: randomBetween,
-  randomBetweenNegPos: randomBetweenNegPos
+  randomBetweenNegPos: randomBetweenNegPos,
+  remap: remap,
+  shuffleArray: shuffleArray
 });
 
 function spinnerY(speed = randomBetween(-1,1)) {
@@ -6285,7 +6301,8 @@ const APP = {
 
   loadingStack: new CheapPool(),
   // gameLoopHooks: new CheapPool(),
-  animationStack: new CheapPool(),
+  // animationStack: new CheapPool(),
+  // sceneGrapth is used to have animated things and others later
   sceneGrapth: new CheapPool(),
   raycastingGraph: new CheapPool(),
 
@@ -6432,8 +6449,12 @@ const APP = {
   // addObject3D(item){
   // just DONT do scene.add() cause that will breaks all parent models
   addObject3D(item){
+    this.scene.add(item);
     this.sceneGrapth.add(item);
     // this.animationStack.add(item);
+  },
+
+  addObject3DRaycasting (item){
     this.raycastingGraph.add(item);
   }
 
@@ -10326,6 +10347,59 @@ function init3d(store) {
 
 }
 
+async function setupBaseScene(store) {
+
+  const _o = store;
+
+  init3d$1(_o);
+  setupOrbitController$1(_o);
+  // setupFirstPersonControls(_o, {movementSpeed:0.4, lookSpeed:0.2, dragToLook: true});
+  // setupFlyControls(_o, {movementSpeed:0.4, rollSpeed:0.4, dragToLook: true, autoForward: false});
+
+  setupGameLoopWithFPSClamp$1(_o);
+
+  addResizeWindow$1(_o);
+  // setupStats(_o);
+
+  setupPlaneHelper$1(_o);
+  setupGridHelper$1({store:_o, type:"y"});
+
+  _o.scene;
+  const camera = _o.camera;
+  _o.renderer;
+
+  // {
+  // const pointLight = new PointLight(0xffffff, 2, 100);
+  // pointLight.position.set(5, 5, 1);
+  // scene.add(pointLight);
+  // pointLight.intensity = 100;
+  // }
+
+  // {
+  // const pointLight = new PointLight(0xffffff, 2, 100);
+  // pointLight.position.set(-5, 5, -1);
+  // scene.add(pointLight);
+  // pointLight.intensity = 100;
+  // }
+
+  Lights$1.hemisphereLight(_o.scene);
+
+  camera.position.z = 0.7;
+  camera.position.y = 0.5;
+  //
+  // const wobject = Primitives.plane({store:_o, scale: 0.1, color: 0x00ffff});
+  // const wobject = Primitives.ball({store:_o, scale: 0.1, color: 0x00ffff});
+  // wobject.position.y += 0.1;
+  // wobject.scale.setScalar(0.4);
+  // wobject.scale.set(0.8, 0.4, 0);
+  // decoSuper3D(wobject);
+  // wobject.visible = false;
+  // _o.addObject3D(wobject);
+
+
+
+}
+
 function setupDebuggerHitPoint(store, scale = 0.01){
   const geo = new SphereGeometry( 1, 18, 18 );
   const mat = new MeshBasicMaterial( { color: 0xcc44ff } );
@@ -10690,6 +10764,11 @@ class PhysicsModel{
 
 }
 
+const box3 = new Box3();
+const boxSizeVector = new Vector3();
+const boxCenterVector = new Vector3();
+
+
 class SuperObject3D extends Object3D{
   tacos = 2;
   // memID not sure if need this yet, use a traverse when needed
@@ -10935,7 +11014,65 @@ class SuperObject3D extends Object3D{
   }
 
 
+  // r: Vector3
+  getBoxSize(){
+    this.updateMatrix();
+    box3.setFromObject(this);
+    return box3.getSize(boxSizeVector);
+  }
 
+  // r : Vector3
+  getBoxCenter(){
+    this.updateMatrix();
+    box3.setFromObject(this);
+    return box3.getCenter(boxCenterVector);
+  }
+
+  // r: tuple
+  getSizeAndCenter(){
+    this.updateMatrix();
+    box3.setFromObject(this);
+    return {size: box3.getSize(boxSizeVector), center: box3.getCenter(boxCenterVector), box: box3}
+  }
+
+  scaleTo(val){
+    const sizeV = this.getBoxSize();
+    const maxDim = Math.max(sizeV.x, sizeV.y, sizeV.z);
+    const scaleFactor = val / maxDim;
+    this.scale.set(scaleFactor, scaleFactor, scaleFactor);
+  }
+
+
+
+  fullyRemoveObject(object3D){
+    if (!(object3D instanceof Object3D)) return false;
+
+    // for better memory management and performance
+    if (object3D.geometry) object3D.geometry.dispose();
+
+    if (object3D.material) {
+        if (object3D.material instanceof Array) {
+            // for better memory management and performance
+            object3D.material.forEach(material => material.dispose());
+        } else {
+            // for better memory management and performance
+            object3D.material.dispose();
+        }
+    }
+    object3D.removeFromParent(); // the parent might be the scene or another Object3D, but it is sure to be removed this way
+    return true;
+
+  }
+
+  fullyRemoveObjectWithName(name){
+    const mm = this.getObjectByName(name);
+    if (mm) {
+      return this.fullyRemoveObject(mm);
+    }
+    else {
+      console.log('object not found');
+    }
+  }
 
 
 
@@ -11000,10 +11137,11 @@ class ModelLoaderObject3D extends SuperObject3D{
 
   animations = null;
   mixer = null;
-  actions = {};
+  actions = {}; // T: THREE.AnimationAction
   shouldAnimateMixer = false;
   previousAction = null;
   currentAction = null;
+  // animators = { }
 
   constructor(modelUrl){
     super();
@@ -11110,6 +11248,82 @@ class ModelLoaderObject3D extends SuperObject3D{
         this.mixer.update(deltaTime);  // Update animations
     }
   }
+
+
+
+  // poses
+  // action really
+  changeAction(name) {
+    // console.log("pose", name);
+    const duration = 0.2;
+    const aa = this.actions[name];
+    aa.clampWhenFinished = true;
+    aa.loop = LoopOnce;
+
+    if(aa){
+      if(aa === this.currentAction) return;
+      if(this.currentAction){
+        this.previousAction = this.currentAction;
+        aa.reset();
+        this.currentAction.crossFadeTo( aa, duration );
+        aa.play();
+        // console.log("?111");
+      }
+      else {
+        // console.log("?222");
+        this.currentAction = aa;
+        aa.reset()
+        .setEffectiveTimeScale( 1 )
+        .setEffectiveWeight( 1 )
+        .fadeIn( duration )
+        .play();
+      }
+
+      this.currentAction = aa;
+      return aa;
+    }
+  }
+
+
+  getRandomAction(){
+    let values = Object.values(this.actions);
+    if (!values || values.length === 0) {
+      console.log("none");
+      return;
+    }
+
+    if (values.length === 1){
+      console.log("not enough");
+      return;
+    }
+    // wget random so shuffle it and take the top
+    // if top name is the current clips name take index 2 cause it will be different
+    // tanks ai
+
+    shuffleArray(values);
+    shuffleArray(values);
+    let pick = values[0];
+    // console.log("pick0", pick);
+    if(this.currentAction && this.currentAction?._clip?.name === pick._clip.name){
+      pick = values[1];
+      // console.log("pick1", pick);
+    }
+    return pick;
+  }
+
+  changeRandomAction(){
+    const aa = this.getRandomAction();
+    // console.log("changeRandomAction",aa);
+    if(aa?._clip?.name){
+      const yy = this.changeAction(aa._clip.name);
+      // if (!yy) {
+      //   debugger
+      // }
+      return yy;
+    }
+    return false;
+  }
+
 }
 
 const _forceV = new Vector3();
@@ -11433,4 +11647,4 @@ const Lights = {
   hemisphereLight : hemisphereLight
 };
 
-export { APP, CheapPool, DeltaFrame, Force, Lights, MaterialProxy, ModelLoaderObject3D, PhysicsModel, PhysicsSession, Preloader, Primitives, REVISION, RollyController, Spring$1 as Spring, SuperObject3D, spinners as a_spinners, addResizeWindow, animateDeco, applyAngularForce, applyForce$1 as applyForce, applySpringForce$1 as applySpringForce, checkIfFileExists, foof, handlePointerMove, handleTouchStart, handleTouchStop, init3d, narf, setupBloomRendering, setupDebuggerHitPoint, setupFirstPersonControls, setupFlyControls, setupGameLoopWithFPSClamp, setupGridHelper, setupKeyboardEvents, setupOrbitController, setupPlaneHelper, setupShadowPlane, setupStats, setupTouchEvents, setupXR, setupXRLighting, setupXRRenderLoopHook, testOrbitControlsToggle, touchEventsData, utilites };
+export { APP, CheapPool, DeltaFrame, Force, Lights, MaterialProxy, ModelLoaderObject3D, PhysicsModel, PhysicsSession, Preloader, Primitives, REVISION, RollyController, Spring$1 as Spring, SuperObject3D, spinners as a_spinners, addResizeWindow, animateDeco, applyAngularForce, applyForce$1 as applyForce, applySpringForce$1 as applySpringForce, checkIfFileExists, foof, handlePointerMove, handleTouchStart, handleTouchStop, init3d, narf, setupBaseScene, setupBloomRendering, setupDebuggerHitPoint, setupFirstPersonControls, setupFlyControls, setupGameLoopWithFPSClamp, setupGridHelper, setupKeyboardEvents, setupOrbitController, setupPlaneHelper, setupShadowPlane, setupStats, setupTouchEvents, setupXR, setupXRLighting, setupXRRenderLoopHook, testOrbitControlsToggle, touchEventsData, utilites };

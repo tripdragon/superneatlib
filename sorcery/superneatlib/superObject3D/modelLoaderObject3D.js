@@ -9,11 +9,13 @@
 // if the model high res complex add a
 // second mesh in the 3d app and name it "selector_mesh"
 
-import { AnimationMixer } from 'three';
+import { AnimationMixer, LoopOnce } from 'three';
 // import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 // import { decoSuper3D } from './decoSuper3D.js';
 import { SuperObject3D } from './superObject3D.js';
+
+import { shuffleArray } from '@utilites';
 
 export class ModelLoaderObject3D extends SuperObject3D{
   isModelLoaded = true;
@@ -23,10 +25,11 @@ export class ModelLoaderObject3D extends SuperObject3D{
 
   animations = null;
   mixer = null;
-  actions = {};
+  actions = {}; // T: THREE.AnimationAction
   shouldAnimateMixer = false;
   previousAction = null;
   currentAction = null;
+  // animators = { }
 
   constructor(modelUrl){
     super();
@@ -133,4 +136,80 @@ export class ModelLoaderObject3D extends SuperObject3D{
         this.mixer.update(deltaTime);  // Update animations
     }
   }
+
+
+
+  // poses
+  // action really
+  changeAction(name) {
+    // console.log("pose", name);
+    const duration = 0.2;
+    const aa = this.actions[name];
+    aa.clampWhenFinished = true;
+    aa.loop = LoopOnce;
+
+    if(aa){
+      if(aa === this.currentAction) return;
+      if(this.currentAction){
+        this.previousAction = this.currentAction;
+        aa.reset();
+        this.currentAction.crossFadeTo( aa, duration )
+        aa.play();
+        // console.log("?111");
+      }
+      else {
+        // console.log("?222");
+        this.currentAction = aa;
+        aa.reset()
+        .setEffectiveTimeScale( 1 )
+        .setEffectiveWeight( 1 )
+        .fadeIn( duration )
+        .play();
+      }
+
+      this.currentAction = aa;
+      return aa;
+    }
+  }
+
+
+  getRandomAction(){
+    let values = Object.values(this.actions);
+    if (!values || values.length === 0) {
+      console.log("none");
+      return;
+    }
+
+    if (values.length === 1){
+      console.log("not enough");
+      return;
+    }
+    // wget random so shuffle it and take the top
+    // if top name is the current clips name take index 2 cause it will be different
+    // tanks ai
+
+    shuffleArray(values);
+    shuffleArray(values);
+    let pick = values[0];
+    // console.log("pick0", pick);
+    if(this.currentAction && this.currentAction?._clip?.name === pick._clip.name){
+      pick = values[1];
+      // console.log("pick1", pick);
+    }
+    return pick;
+  }
+
+  changeRandomAction(){
+    const aa = this.getRandomAction();
+    // console.log("changeRandomAction",aa);
+    if(aa?._clip?.name){
+      const yy = this.changeAction(aa._clip.name);
+      // if (!yy) {
+      //   debugger
+      // }
+      return yy;
+    }
+    return false;
+  }
+
 }

@@ -1,6 +1,13 @@
 
 threejs gameengine ish
 
+
+from this dir, do `npm link`
+then in the external project do `npm link superneatlib`
+then `npm install superneatlib`
+It might show some 404's but starting server seems to work and its symlink is in the node_modules dir
+
+
 open 3 tabs
 run each of these
 
@@ -26,11 +33,6 @@ then in any file
 ```
 import { narf } from 'superneat';
 ```
-
-from this dir, do `npm link`
-then in the external project do `npm link superneatlib`
-then `npm install superneatlib`
-It might show some 404's but starting server seems to work and its symlink is in the node_modules dir
 
 https://chatgpt.com/share/679adf71-f028-800a-ba4a-ab9da27407db
 ```

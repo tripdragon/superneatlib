@@ -51,6 +51,7 @@ export * from './superneatlib/setups/addResizeWindow.js';
 export * from './superneatlib/setups/animateDeco.js';
 export * from './superneatlib/setups/gameLoop.js';
 export * from './superneatlib/setups/init3D.js';
+export * from './superneatlib/setups/setupBaseScene.js';
 export * from './superneatlib/setups/setupDebuggerHitPoint.js';
 export * from './superneatlib/setups/setupGridHelper.js';
 export * from './superneatlib/setups/setupKeyboardEvents.js';
