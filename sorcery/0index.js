@@ -26,12 +26,15 @@ export * from './superneatlib/logics/touchSystems/touchLogics.js';
 
 // export * from './superneatlib/primitives/ball.js';
 import { ball } from './superneatlib/primitives/meshes/ball.js';
+import { cube } from './superneatlib/primitives/meshes/cube.js';
 import { line } from './superneatlib/primitives/meshes/line.js';
 import { plane } from './superneatlib/primitives/meshes/plane.js';
 export const Primitives = {
   ball : ball,
   line : line,
-  plane : plane
+  plane : plane,
+  cube : cube,
+  cubey : cube
 }
 import { hemisphereLight } from './superneatlib/primitives/lights/hemisphereLight.js';
 export const Lights = {

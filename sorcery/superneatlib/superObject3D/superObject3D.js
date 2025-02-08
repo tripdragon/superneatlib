@@ -2,7 +2,7 @@
 // use export decoSuper3D(obj)
 // to patch the Object3D
 
-import { Object3D, Mesh, Box3, Vector3 } from 'three';
+import { Object3D, Mesh, Box3, Vector3, ArrowHelper, AxesHelper } from 'three';
 import { CheapPool } from '@tools/cheapPool.js';
 
 // import { decoSuper3D } from './decoSuper3D.js';
@@ -34,11 +34,17 @@ export class SuperObject3D extends Object3D{
 
   physics; // T : PhysicsModel
 
+  axesHelper;
+
+
   constructor(){
     super();
     this.isSuperObject3D = true;
     this.type = 'SuperObject3D';  // Optional: set a type property for better identification
     this.physics = new PhysicsModel(this);
+    this.axisHelper = new AxesHelper(2);
+    this.add(this.axisHelper);
+    this.axisHelper.visible = false;
   }
 
   fish(){

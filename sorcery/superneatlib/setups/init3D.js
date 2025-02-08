@@ -5,6 +5,12 @@ import { Clock, WebGLRenderer, PCFSoftShadowMap, Scene, PerspectiveCamera, Reinh
 
 
 export function init3d(store) {
+
+  if(store.renderer){
+    console.log("renderer init already setup");
+    return;
+  }
+
   const _o = store;
 
   // _o.onConsole.log("init go");

@@ -20,3 +20,19 @@
 //
 //   return cube;
 // }
+
+
+
+import { BoxGeometry, MeshBasicMaterial, Mesh } from "three";
+
+// makeCubey
+export function cube({scene, color = 0xcc44ff, scale = 0.01}={}){
+  const geo = new BoxGeometry( 1, 1, 1 );
+  const mat = new MeshBasicMaterial( { color: color } );
+  const box = new Mesh( geo, mat );
+  box.scale.setScalar(scale);
+  if(scene){
+    scene.add(box);
+  }
+  return box;
+}

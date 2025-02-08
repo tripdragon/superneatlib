@@ -154,7 +154,7 @@ export function setupGameLoopWithFPSClamp(store, fps = 60) {
 
       for (let i = 0; i < store.sceneGrapth.length; i++) {
         const aa = store.sceneGrapth[i];
-        if (aa.isSuperObject3D) {
+        // if (aa.isSuperObject3D) {
           if (aa?.animate) {
            aa.animate(deltaTime);
           }
@@ -164,7 +164,7 @@ export function setupGameLoopWithFPSClamp(store, fps = 60) {
           if(aa?.shouldAnimateMixer && aa.shouldAnimateMixer === true && aa.mixer){
             aa.mixer.update(dt);
           }
-        }
+        // }
         // else if (aa.isObject3D) {
         //   if (aa?.userData?.animate) {
         //    aa.userData.animate();

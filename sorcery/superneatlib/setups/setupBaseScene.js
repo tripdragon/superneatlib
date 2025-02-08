@@ -16,6 +16,11 @@ import { setupPlaneHelper, setupGridHelper,
 
 export async function setupBaseScene(store) {
 
+  if(store.scene) {
+    console.log("scene already setup");
+    return;
+  }
+
   const _o = store;
 
   init3d(_o);

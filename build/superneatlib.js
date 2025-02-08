@@ -1,4 +1,4 @@
-import { OrthographicCamera, Mesh, BufferGeometry, Float32BufferAttribute, ShaderMaterial, UniformsUtils, Vector2, WebGLRenderTarget, HalfFloatType, NoBlending, Clock, Color, Vector3, AdditiveBlending, MeshBasicMaterial, RawShaderMaterial, ColorManagement, SRGBTransfer, LinearToneMapping, ReinhardToneMapping, CineonToneMapping, ACESFilmicToneMapping, AgXToneMapping, NeutralToneMapping, Matrix4, TrianglesDrawMode, TriangleFanDrawMode, TriangleStripDrawMode, Loader, LoaderUtils, FileLoader, LinearSRGBColorSpace, SpotLight, PointLight, DirectionalLight, SRGBColorSpace, MeshPhysicalMaterial, Quaternion, InstancedMesh, InstancedBufferAttribute, Object3D, TextureLoader, ImageBitmapLoader, BufferAttribute, InterleavedBuffer, InterleavedBufferAttribute, LinearFilter, LinearMipmapLinearFilter, RepeatWrapping, NearestFilter, PointsMaterial, Material, LineBasicMaterial, MeshStandardMaterial, DoubleSide, PropertyBinding, SkinnedMesh, LineSegments, Line, LineLoop, Points, Group, PerspectiveCamera, MathUtils, Skeleton, AnimationClip, Bone, InterpolateLinear, NearestMipmapNearestFilter, LinearMipmapNearestFilter, NearestMipmapLinearFilter, ClampToEdgeWrapping, MirroredRepeatWrapping, InterpolateDiscrete, FrontSide, Texture, VectorKeyframeTrack, NumberKeyframeTrack, QuaternionKeyframeTrack, Box3, Sphere, Interpolant, Raycaster, Plane, EventDispatcher, PlaneHelper, SphereGeometry, LineCurve3, TubeGeometry, PlaneGeometry, HemisphereLight, HemisphereLightHelper, LightProbe, WebGLCubeRenderTarget, Ray, Controls, MOUSE, TOUCH, Spherical, WebGLRenderer, PCFSoftShadowMap, Scene, GridHelper, ShadowMaterial, AnimationMixer, LoopOnce } from 'three';
+import { Vector3, Quaternion, OrthographicCamera, Mesh, BufferGeometry, Float32BufferAttribute, ShaderMaterial, UniformsUtils, Vector2, WebGLRenderTarget, HalfFloatType, NoBlending, Clock, Color, AdditiveBlending, MeshBasicMaterial, RawShaderMaterial, ColorManagement, SRGBTransfer, LinearToneMapping, ReinhardToneMapping, CineonToneMapping, ACESFilmicToneMapping, AgXToneMapping, NeutralToneMapping, Matrix4, TrianglesDrawMode, TriangleFanDrawMode, TriangleStripDrawMode, Loader, LoaderUtils, FileLoader, LinearSRGBColorSpace, SpotLight, PointLight, DirectionalLight, SRGBColorSpace, MeshPhysicalMaterial, InstancedMesh, InstancedBufferAttribute, Object3D, TextureLoader, ImageBitmapLoader, BufferAttribute, InterleavedBuffer, InterleavedBufferAttribute, LinearFilter, LinearMipmapLinearFilter, RepeatWrapping, NearestFilter, PointsMaterial, Material, LineBasicMaterial, MeshStandardMaterial, DoubleSide, PropertyBinding, SkinnedMesh, LineSegments, Line as Line$1, LineLoop, Points, Group, PerspectiveCamera, MathUtils, Skeleton, AnimationClip, Bone, InterpolateLinear, NearestMipmapNearestFilter, LinearMipmapNearestFilter, NearestMipmapLinearFilter, ClampToEdgeWrapping, MirroredRepeatWrapping, InterpolateDiscrete, FrontSide, Texture, VectorKeyframeTrack, NumberKeyframeTrack, QuaternionKeyframeTrack, Box3, Sphere, Interpolant, Raycaster, Plane, EventDispatcher, PlaneHelper, SphereGeometry, LineCurve3, TubeGeometry, BoxGeometry, PlaneGeometry, HemisphereLight, HemisphereLightHelper, LightProbe, WebGLCubeRenderTarget, Ray, Controls, MOUSE, TOUCH, Spherical, WebGLRenderer, PCFSoftShadowMap, Scene, GridHelper, ShadowMaterial, AxesHelper, AnimationMixer, LoopOnce } from 'three';
 import GUI from 'lil-gui';
 import { init3d as init3d$1, setupOrbitController as setupOrbitController$1, setupGameLoopWithFPSClamp as setupGameLoopWithFPSClamp$1, addResizeWindow as addResizeWindow$1, setupPlaneHelper as setupPlaneHelper$1, setupGridHelper as setupGridHelper$1, Lights as Lights$1 } from 'superneatlib';
 
@@ -47,12 +47,65 @@ function shuffleArray(array) {
     }
 }
 
+const vec = new Vector3();
+function randomPosition(distance) {
+  const angle = Math.random() * Math.PI * 2; // Random angle
+  const elevation = Math.random() * Math.PI - Math.PI / 2; // Random vertical angle
+  const x = distance * Math.cos(elevation) * Math.cos(angle);
+  const y = distance * Math.cos(elevation) * Math.sin(angle);
+  const z = distance * Math.sin(elevation);
+  // return new Vector3(x, y, z);
+  return vec.set(x,y,z);
+}
+
+
+
+
+
+
+// Smooth look-at function
+// ai
+// not the best idea, it gets stuck doing this
+// without some outer object
+// also a MUCH simplier method is
+// object.quaternion.slerp(toTarget, speed)
+// but then you need a parrallel Dot product test to tell it to stop
+// Also multiple objects running their own requestAnimationFrame WILL eat frame skipping
+//
+function smoothLookAt(object, target, duration = 1.5) {
+    let startTime = performance.now();
+    let startQuaternion = object.quaternion.clone();
+    let targetQuaternion = new Quaternion();
+    new Quaternion();
+
+    // Compute target rotation
+    object.lookAt(target);
+    targetQuaternion.copy(object.quaternion);
+    object.quaternion.copy(startQuaternion); // Reset to start
+
+    function animate() {
+        let elapsed = (performance.now() - startTime) / 500;
+        let t = Math.min(elapsed / duration, 1); // Clamp t to 0-1
+
+        object.quaternion.slerpQuaternions(startQuaternion, targetQuaternion, t);
+
+        if (t < 1) {
+          console.log("?¿¿¿");
+            requestAnimationFrame(animate);
+        }
+    }
+
+    animate();
+}
+
 var utilites = /*#__PURE__*/Object.freeze({
   __proto__: null,
   randomBetween: randomBetween,
   randomBetweenNegPos: randomBetweenNegPos,
+  randomPosition: randomPosition,
   remap: remap,
-  shuffleArray: shuffleArray
+  shuffleArray: shuffleArray,
+  smoothLookAt: smoothLookAt
 });
 
 function spinnerY(speed = randomBetween(-1,1)) {
@@ -5268,7 +5321,7 @@ class GLTFParser {
 
 				} else if ( primitive.mode === WEBGL_CONSTANTS.LINE_STRIP ) {
 
-					mesh = new Line( geometry, material );
+					mesh = new Line$1( geometry, material );
 
 				} else if ( primitive.mode === WEBGL_CONSTANTS.LINE_LOOP ) {
 
@@ -6965,13 +7018,13 @@ function onConsole(name, ...vals) {
   logger.log(name, ...vals);
 }
 
-function ball({store, color = 0xcc44ff, scale = 0.01}={}){
+function ball({scene, color = 0xcc44ff, scale = 0.01}={}){
   const geo = new SphereGeometry( 1, 18, 18 );
   const mat = new MeshBasicMaterial( { color: color } );
   const sphere = new Mesh( geo, mat );
   sphere.scale.setScalar(scale);
-  if(store){
-    store.scene.add(sphere);
+  if(scene){
+    scene.add(sphere);
   }
   return sphere;
 }
@@ -7161,16 +7214,47 @@ function testOrbitControlsToggle(val) {
 
 // line({p0:new Vector3(0,0,0), p1: new Vector3(2,2,2), size: 0.02, scene: _o.scene, color: 0x00ffff})
 
+class Line extends Mesh{
+  p0;
+  p1;
+  size = 0.5;
+  path;
+  isLine = true;
+  constructor({p0,p1, color = 0xff00ff, size = 0.5}){
+
+    const path = new LineCurve3(p0,p1);
+    const segments = 1;
+    const radius = 2;
+    const geometry = new TubeGeometry( path, segments, size, radius, false );
+    const material = new MeshBasicMaterial( { color: color } );
+    // const mesh = new Mesh( geometry, material );
+    super(geometry, material);
+    this.path = path;
+    this.size = size;
+
+  }
+
+  updatePoints(p0,p1){
+    this.geometry.dispose();
+    // debugger
+    this.path.v1.copy(p0);
+    this.path.v2.copy(p1);
+    this.geometry = new TubeGeometry( this.path, 1, this.size, 2, false );  }
+}
+
 function line({p0,p1, color = 0xff00ff, size = 0.5, scene  }) {
 
-  const path = new LineCurve3(p0,p1);
+  // const path = new LineCurve3(p0,p1);
+  //
+  // const geometry = new TubeGeometry( path, 1, size, 2, false );
+  // const material = new MeshBasicMaterial( { color: color } );
+  // const mesh = new Mesh( geometry, material );
+  const item = new Line({p0,p1, color, size});
+  if(scene){
+    scene.add( item );
+  }
 
-  const geometry = new TubeGeometry( path, 1, size, 2, false );
-  const material = new MeshBasicMaterial( { color: color } );
-  const mesh = new Mesh( geometry, material );
-  scene.add( mesh );
-
-  return mesh;
+  return item;
 
 }
 
@@ -7404,14 +7488,50 @@ function handleTouchStop(ev) {
 
 }
 
-function plane({store, color = 0xcc44ff, scale = 0.01}={}){
+//
+//
+// import { BoxGeometry, MeshBasicMaterial, Mesh } from 'three';
+//
+// export function makeCubey({scale = 1, parent, color = 0x00ff00}){
+//
+//   const geometry = new BoxGeometry( 1, 1, 1 );
+//   // const material = new THREE.MeshStandardMaterial( {color: 0x00ff00} );
+//   const material = new MeshBasicMaterial( {color: color} );
+//   const cube = new Mesh( geometry, material );
+//   cube.position.set(0,0,0);
+//   // reticle.matrix.decompose(cube.position, cube.quaternion, cube.scale);
+//   cube.rotation.y = 1.1;
+//   cube.rotation.z = 0.4;
+//   const s = 0.01;
+//   cube.scale.set( scale, scale, scale);
+//   if(parent){
+//     parent.add( cube );
+//   }
+//
+//   return cube;
+// }
+
+
+// makeCubey
+function cube({scene, color = 0xcc44ff, scale = 0.01}={}){
+  const geo = new BoxGeometry( 1, 1, 1 );
+  const mat = new MeshBasicMaterial( { color: color } );
+  const box = new Mesh( geo, mat );
+  box.scale.setScalar(scale);
+  if(scene){
+    scene.add(box);
+  }
+  return box;
+}
+
+function plane({scene, color = 0xcc44ff, scale = 0.01}={}){
   const geometry = new PlaneGeometry( 1, 1 );
   const material = new MeshBasicMaterial( {color: color, side: DoubleSide} );
   const plane = new Mesh( geometry, material );
 
   plane.scale.setScalar(scale);
-  if(store){
-    store.scene.add(plane);
+  if(scene){
+    scene.add(plane);
   }
   return plane;
 }
@@ -10229,7 +10349,7 @@ function setupGameLoopWithFPSClamp(store, fps = 60) {
 
       for (let i = 0; i < store.sceneGrapth.length; i++) {
         const aa = store.sceneGrapth[i];
-        if (aa.isSuperObject3D) {
+        // if (aa.isSuperObject3D) {
           if (aa?.animate) {
            aa.animate(deltaTime);
           }
@@ -10239,7 +10359,7 @@ function setupGameLoopWithFPSClamp(store, fps = 60) {
           if(aa?.shouldAnimateMixer && aa.shouldAnimateMixer === true && aa.mixer){
             aa.mixer.update(dt);
           }
-        }
+        // }
         // else if (aa.isObject3D) {
         //   if (aa?.userData?.animate) {
         //    aa.userData.animate();
@@ -10290,6 +10410,12 @@ function setupGameLoopWithFPSClamp(store, fps = 60) {
 }
 
 function init3d(store) {
+
+  if(store.renderer){
+    console.log("renderer init already setup");
+    return;
+  }
+
   const _o = store;
 
   // _o.onConsole.log("init go");
@@ -10348,6 +10474,11 @@ function init3d(store) {
 }
 
 async function setupBaseScene(store) {
+
+  if(store.scene) {
+    console.log("scene already setup");
+    return;
+  }
 
   const _o = store;
 
@@ -10788,11 +10919,17 @@ class SuperObject3D extends Object3D{
 
   physics; // T : PhysicsModel
 
+  axesHelper;
+
+
   constructor(){
     super();
     this.isSuperObject3D = true;
     this.type = 'SuperObject3D';  // Optional: set a type property for better identification
     this.physics = new PhysicsModel(this);
+    this.axisHelper = new AxesHelper(2);
+    this.add(this.axisHelper);
+    this.axisHelper.visible = false;
   }
 
   fish(){
@@ -11641,7 +11778,9 @@ class Preloader{
 const Primitives = {
   ball : ball,
   line : line,
-  plane : plane
+  plane : plane,
+  cube : cube,
+  cubey : cube
 };
 const Lights = {
   hemisphereLight : hemisphereLight
