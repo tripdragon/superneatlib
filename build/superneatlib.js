@@ -10429,8 +10429,10 @@ function init3d(store) {
   _o.container.id = "threecontainer";
 
 
-  const renderer = new WebGLRenderer({ antialias: true, alpha: true });
+  const renderer = new WebGLRenderer({ antialias: true, alpha: false });
   _o.renderer = renderer;
+  // _o.renderer.setClearColor( 0x171717, 0);
+
   _o.domElement = renderer.domElement;
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -10458,7 +10460,8 @@ function init3d(store) {
   const scene = new Scene();
   _o.scene = scene;
   _o.scene.name = "narfs222";
-
+  
+  _o.scene.background = new Color().setHex(0x171717);
 
   _o.camera = new PerspectiveCamera(
     70,
